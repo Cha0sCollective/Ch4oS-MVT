@@ -55,8 +55,10 @@ def summarize(report: dict | None, result: subprocess.CompletedProcess[str], out
 
     tests = report.get("tests", [])
     passed = sum(item.get("status") == "passed" for item in tests)
+    raw_status = report.get("status")
+    status = "pass" if raw_status == "lifecycle_passed_logs_unreviewed" else "fail" if raw_status == "failed" else "error"
     summary = {
-        "status": "pass" if report.get("status") == "lifecycle_passed_logs_unreviewed" else report.get("status", "error"),
+        "status": status,
         "suite": "lifecycle",
         "pack_sha": report.get("pack_sha"),
         "minecraft": report.get("versions", {}).get("minecraft"),
@@ -70,6 +72,10 @@ def summarize(report: dict | None, result: subprocess.CompletedProcess[str], out
         summary["status"] = "fail" if failed.get("status") == "failed" else "error"
         summary["failed_step"] = failed.get("name")
         summary["detail"] = failed.get("detail", "")
+    elif report.get("cleanup_errors"):
+        summary["status"] = "error"
+        summary["failed_step"] = "cleanup"
+        summary["detail"] = "; ".join(str(item) for item in report["cleanup_errors"])
     return summary
 
 
