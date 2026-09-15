@@ -26,6 +26,7 @@ import xml.etree.ElementTree as ET
 REPO = "Cha0sCollective/Create-Ch4os-Packwiz"
 STEPS = ("prepare", "boot_fresh", "tick_fresh", "write_fixture", "save_fresh",
          "stop_fresh", "boot_saved", "verify_persistence", "save_saved", "stop_saved")
+ANSI_SGR = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class CheckFailed(RuntimeError):
@@ -36,17 +37,21 @@ class InfrastructureError(RuntimeError):
     """The harness could not obtain valid test evidence."""
 
 
+def clean_rcon(text: str) -> str:
+    return ANSI_SGR.sub("", text).strip()
+
+
 def parse_score(text: str, holder: str) -> int:
     # Intentionally fail closed on unknown/localized responses. Dedicated 1.21.1
-    # console responses are expected; an RCON process exit code is not an assertion.
-    match = re.fullmatch(re.escape(holder) + r" has (-?\d+) \[mvt\]", text.strip())
+    # console responses are expected; ANSI SGR formatting from rcon-cli is ignored.
+    match = re.fullmatch(re.escape(holder) + r" has (-?\d+) \[mvt\]", clean_rcon(text))
     if match is None:
         raise CheckFailed(f"Unrecognized scoreboard response: {text!r}")
     return int(match.group(1))
 
 
 def parse_time(text: str) -> int:
-    match = re.fullmatch(r"The time is (\d+)", text.strip())
+    match = re.fullmatch(r"The time is (\d+)", clean_rcon(text))
     if match is None:
         raise CheckFailed(f"Unrecognized time response: {text!r}")
     return int(match.group(1))

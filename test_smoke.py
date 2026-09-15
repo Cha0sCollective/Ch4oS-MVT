@@ -17,6 +17,10 @@ class Parsers(unittest.TestCase):
         self.assertEqual(parse_score('#probe has 1 [mvt]\n', '#probe'), 1)
         self.assertEqual(parse_score('#nonce has -12 [mvt]', '#nonce'), -12)
 
+    def test_terminal_formatting_is_ignored(self):
+        self.assertEqual(parse_time('The time is 24\n\x1b[0m'), 24)
+        self.assertEqual(parse_score('#probe has 1 [mvt]\x1b[0m', '#probe'), 1)
+
     def test_reject_command_error(self):
         for text in ('Unknown command', '', '#other has 1 [mvt]', '#probe has 1 [other]'):
             with self.assertRaises(CheckFailed):
