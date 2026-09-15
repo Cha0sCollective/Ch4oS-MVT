@@ -1,9 +1,10 @@
 """Harness unit tests only: these do NOT launch or validate Minecraft."""
 import argparse
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
@@ -87,6 +88,14 @@ class Harness(unittest.TestCase):
     def test_redaction(self):
         self.assertNotIn(self.runner.password, self.runner.redact('password=' + self.runner.password))
 
+    @patch('smoke.subprocess.run')
+    def test_docker_output_uses_utf8_with_replacement(self, mock_run):
+        mock_run.return_value = SimpleNamespace(stdout='ok', returncode=0)
+        self.assertEqual(self.runner.docker('version'), 'ok')
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs['encoding'], 'utf-8')
+        self.assertEqual(kwargs['errors'], 'replace')
+
     @patch.object(Runner, 'run', return_value=0)
     def test_cli_accepts_host_platform(self, mock_run):
         output = str(Path(self.tmp.name) / 'cli-result')
@@ -94,6 +103,14 @@ class Harness(unittest.TestCase):
         with patch('sys.argv', argv):
             self.assertEqual(main(), 0)
         mock_run.assert_called_once_with()
+
+    def test_existing_output_path_is_clear_cli_error(self):
+        argv = ['smoke.py', '--accept-eula', '--pack-sha', 'a' * 40,
+                '--output', str(self.runner.out)]
+        with patch('sys.argv', argv), redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit) as exc:
+                main()
+        self.assertEqual(exc.exception.code, 2)
 
 
 if __name__ == '__main__':
