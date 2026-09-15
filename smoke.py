@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import platform
 import re
@@ -345,8 +344,6 @@ def main() -> int:
     for value in (args.heap, args.container_memory):
         if not re.fullmatch(r"[1-9]\d*[gGmM]", value):
             parser.error("Memory values must be positive whole G or M units")
-    if os.name != "posix":
-        parser.error("Run this example on Linux or inside a Linux development environment")
     def interrupt(signum, frame):
         raise InfrastructureError(f"Interrupted by signal {signum}")
     signal.signal(signal.SIGTERM, interrupt)
