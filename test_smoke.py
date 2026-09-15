@@ -96,6 +96,20 @@ class Harness(unittest.TestCase):
         self.assertEqual(kwargs['encoding'], 'utf-8')
         self.assertEqual(kwargs['errors'], 'replace')
 
+    def test_boot_fails_fast_after_done_if_readiness_probe_fails(self):
+        self.runner.state = lambda: {'Running': True, 'OOMKilled': False, 'ExitCode': 0}
+        self.runner.docker = lambda *args, **kwargs: 'Done (1.0s)!' if args[0] == 'logs' else ''
+        calls = []
+
+        def bad_rcon(command, timeout=30):
+            calls.append(command)
+            raise CheckFailed("Unrecognized time response: 'unexpected'")
+
+        self.runner.rcon = bad_rcon
+        with self.assertRaisesRegex(CheckFailed, 'Server reached Done but RCON readiness probe failed'):
+            self.runner.boot('fresh')
+        self.assertEqual(calls, ['time query gametime'])
+
     @patch.object(Runner, 'run', return_value=0)
     def test_cli_accepts_host_platform(self, mock_run):
         output = str(Path(self.tmp.name) / 'cli-result')

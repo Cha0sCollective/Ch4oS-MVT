@@ -188,11 +188,12 @@ class Runner:
             # A prior boot's Done line is excluded by --since.
             if re.search(r"Done \([\d.]+s\)!", logs):
                 try:
-                    parse_time(self.rcon("time query gametime", timeout=10))
-                    self.report.setdefault("java_runtime", self.docker("exec", self.name, "java", "-version"))
-                    return
-                except (CheckFailed, InfrastructureError):
-                    pass
+                    response = self.rcon("time query gametime", timeout=10)
+                    parse_time(response)
+                except (CheckFailed, InfrastructureError) as exc:
+                    raise type(exc)(f"Server reached Done but RCON readiness probe failed: {exc}") from exc
+                self.report.setdefault("java_runtime", self.docker("exec", self.name, "java", "-version"))
+                return
             time.sleep(2)
         raise InfrastructureError("Boot/readiness deadline exceeded; inspect logs and runner resources")
 
