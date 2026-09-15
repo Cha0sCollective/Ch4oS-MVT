@@ -29,8 +29,15 @@ permissions:
 
 jobs:
   harness-tests:
-    name: Harness unit tests
-    runs-on: ubuntu-24.04
+    name: Harness unit tests (${{ matrix.os }})
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: python3
+          - os: windows-2025
+            python: python
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 5
     steps:
       - name: Check out MVT
@@ -38,7 +45,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Test harness without Minecraft
-        run: python3 -m unittest discover -p 'test_*.py' -v
+        run: ${{ matrix.python }} -m unittest discover -p 'test_*.py' -v
 
   lifecycle:
     name: Dedicated-server lifecycle
