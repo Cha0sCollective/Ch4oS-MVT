@@ -25,8 +25,8 @@ See [the testing plan](docs/TESTING-PLAN.md) for the architecture and coverage r
 
 `.github/workflows/smoke.yml` has two paths:
 
-- Pull requests that change the harness or workflow run the Python unit tests only. They do not launch Minecraft and do not require EULA acceptance.
-- `workflow_dispatch` runs the unit tests and, when the operator explicitly accepts the Minecraft EULA, the disposable dedicated-server lifecycle suite.
+- Pull requests that change the harness or workflow run the Python unit tests on both Ubuntu and Windows. They do not launch Minecraft and do not require EULA acceptance.
+- `workflow_dispatch` runs the unit tests and, when the operator explicitly accepts the Minecraft EULA, the disposable dedicated-server lifecycle suite on Ubuntu.
 
 For a manual lifecycle run, open **Actions → Ch4oS Modpack Verification and Testing → Run workflow** and provide:
 
@@ -38,15 +38,31 @@ The workflow has read-only repository permissions, does not publish Minecraft or
 
 ## Run locally
 
-Requirements: Linux, Docker, and Python 3.11 or newer. The harness uses only Python's standard library.
+Requirements: Python 3.11 or newer plus Docker. On Windows, use Docker Desktop with Linux containers. The harness uses only Python's standard library and talks to Docker through the normal `docker` CLI.
 
-Run harness-only tests without starting Minecraft:
+Run harness-only tests without starting Minecraft.
+
+PowerShell:
+
+```powershell
+python -m unittest discover -p 'test_*.py' -v
+```
+
+Linux/macOS shell:
 
 ```sh
 python3 -m unittest discover -p 'test_*.py' -v
 ```
 
-After reading and accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula), run the lifecycle suite against an immutable pack commit:
+After reading and accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula), run the lifecycle suite against an immutable pack commit.
+
+PowerShell:
+
+```powershell
+python smoke.py --accept-eula --pack-sha 625ae3bea9775a1757b63265a392a0fcec430fd6 --output mvt-results-first-run
+```
+
+Linux/macOS shell:
 
 ```sh
 python3 smoke.py --accept-eula \

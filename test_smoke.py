@@ -1,12 +1,14 @@
 """Harness unit tests only: these do NOT launch or validate Minecraft."""
 import argparse
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
-from smoke import CheckFailed, InfrastructureError, Runner, parse_score, parse_time, validate_sha
+from smoke import CheckFailed, InfrastructureError, Runner, main, parse_score, parse_time, validate_sha
 
 
 class Parsers(unittest.TestCase):
@@ -67,7 +69,8 @@ class Harness(unittest.TestCase):
 
     def test_failure_skips_downstream_and_records_junit(self):
         with patch.object(self.runner, 'prepare', side_effect=CheckFailed('hash mismatch')):
-            self.assertEqual(self.runner.run(), 1)
+            with redirect_stdout(StringIO()):
+                self.assertEqual(self.runner.run(), 1)
         tests = self.runner.report['tests']
         self.assertEqual(tests[0]['status'], 'failed')
         self.assertTrue(all(test['status'] == 'skipped' for test in tests[1:]))
@@ -77,11 +80,20 @@ class Harness(unittest.TestCase):
 
     def test_infrastructure_error_is_not_pass(self):
         with patch.object(self.runner, 'prepare', side_effect=InfrastructureError('no docker')):
-            self.assertEqual(self.runner.run(), 2)
+            with redirect_stdout(StringIO()):
+                self.assertEqual(self.runner.run(), 2)
         self.assertEqual(self.runner.report['status'], 'error')
 
     def test_redaction(self):
         self.assertNotIn(self.runner.password, self.runner.redact('password=' + self.runner.password))
+
+    @patch.object(Runner, 'run', return_value=0)
+    def test_cli_accepts_host_platform(self, mock_run):
+        output = str(Path(self.tmp.name) / 'cli-result')
+        argv = ['smoke.py', '--accept-eula', '--pack-sha', 'a' * 40, '--output', output]
+        with patch('sys.argv', argv):
+            self.assertEqual(main(), 0)
+        mock_run.assert_called_once_with()
 
 
 if __name__ == '__main__':
