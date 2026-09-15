@@ -1,118 +1,88 @@
-import os
-import shutil
+"""Harness unit tests only: these do NOT launch or validate Minecraft."""
+import argparse
+from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
-from unittest.mock import patch, MagicMock
 
-import smoke
+from smoke import CheckFailed, InfrastructureError, Runner, parse_score, parse_time, validate_sha
 
-class TestMVTSmoke(unittest.TestCase):
 
+class Parsers(unittest.TestCase):
+    def test_score(self):
+        self.assertEqual(parse_score('#probe has 1 [mvt]\n', '#probe'), 1)
+        self.assertEqual(parse_score('#nonce has -12 [mvt]', '#nonce'), -12)
+
+    def test_reject_command_error(self):
+        for text in ('Unknown command', '', '#other has 1 [mvt]', '#probe has 1 [other]'):
+            with self.assertRaises(CheckFailed):
+                parse_score(text, '#probe')
+
+    def test_time(self):
+        self.assertEqual(parse_time('The time is 123'), 123)
+        with self.assertRaises(CheckFailed):
+            parse_time('Unknown command')
+
+    def test_commit_only(self):
+        self.assertEqual(validate_sha('A' * 40), 'a' * 40)
+        for text in ('public', 'main; echo bad', '../main', 'a' * 39):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                validate_sha(text)
+
+
+class Harness(unittest.TestCase):
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp()
-        self.output_dir = os.path.join(self.test_dir, "output")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        args = argparse.Namespace(output=str(Path(self.tmp.name) / 'result'),
+                                  pack_sha='a' * 40, image='example-image', heap='4G',
+                                  container_memory='6g', boot_timeout=1)
+        self.runner = Runner(args)
 
-    def tearDown(self):
-        shutil.rmtree(self.test_dir)
+    def test_probe_is_reset_before_command(self):
+        calls = []
+        self.runner.rcon = lambda command, timeout=30: calls.append(command) or ''
+        scores = iter([0, 0])
+        self.runner.score = lambda holder: next(scores)
+        with self.assertRaises(CheckFailed):
+            self.runner.check_command('invalid command')
+        self.assertEqual(calls[0], 'scoreboard players set #probe mvt 0')
+        self.assertIn('execute store success', calls[1])
 
-    @patch("smoke.subprocess.run")
-    def test_rejection_of_unknown_command_output(self, mock_run):
-        # Setup mock to return garbage instead of "Changed the block"
-        mock_res = MagicMock()
-        mock_res.stdout = "Unknown command or syntax error"
-        mock_run.return_value = mock_res
-        
-        # Test the rcon command processing manually or mock the whole flow
-        res = smoke.docker_rcon("dummy", "secret", "setblock 0 100 0 block")
-        
-        # More directly, test the condition logic for block placement:
-        success = "Changed the block" in res or "placed" in res.lower() or "set" in res.lower()
-        self.assertFalse(success, "Should reject unknown command output")
+    def test_persistence_does_not_initialize_fixture(self):
+        self.runner.score = lambda holder: self.runner.nonce
+        commands = []
+        self.runner.check_command = commands.append
+        self.runner.loaded = lambda: None
+        self.runner.tick = lambda: None
+        self.runner.verify_fixture()
+        self.assertEqual(len(commands), 2)
+        self.assertTrue(all(command.startswith('execute if ') for command in commands))
 
-    def test_sha_validation(self):
-        # We can test the regex validation directly
-        import re
-        valid_sha = "625ae3bea9775a1757b63265a392a0fcec430fd6"
-        invalid_sha = "not-a-sha"
-        short_sha = "625ae3be"
-        
-        self.assertTrue(re.match(r"^[0-9a-f]{40}$", valid_sha))
-        self.assertFalse(re.match(r"^[0-9a-f]{40}$", invalid_sha))
-        self.assertFalse(re.match(r"^[0-9a-f]{40}$", short_sha))
+    def test_nonce_mismatch_fails(self):
+        self.runner.score = lambda holder: self.runner.nonce + 1
+        with self.assertRaises(CheckFailed):
+            self.runner.verify_fixture()
 
-    @patch("smoke.subprocess.run")
-    def test_secret_redaction(self, mock_run):
-        mock_res = MagicMock()
-        mock_res.stdout = "Logged in with password mvt-secret successfully!"
-        mock_run.return_value = mock_res
-        
-        out = smoke.docker_rcon("dummy", "mvt-secret", "list")
-        self.assertNotIn("mvt-secret", out)
-        self.assertIn("***", out)
+    def test_failure_skips_downstream_and_records_junit(self):
+        with patch.object(self.runner, 'prepare', side_effect=CheckFailed('hash mismatch')):
+            self.assertEqual(self.runner.run(), 1)
+        tests = self.runner.report['tests']
+        self.assertEqual(tests[0]['status'], 'failed')
+        self.assertTrue(all(test['status'] == 'skipped' for test in tests[1:]))
+        root = ET.parse(self.runner.out / 'junit.xml').getroot()
+        self.assertEqual(root.get('failures'), '1')
+        self.assertFalse(self.runner.report['release_gate_approved'])
 
-    def test_failure_classification(self):
-        # InfraError for missing docker
-        with self.assertRaises(smoke.InfraError):
-            smoke.run_cmd(["non_existent_command_12345"])
+    def test_infrastructure_error_is_not_pass(self):
+        with patch.object(self.runner, 'prepare', side_effect=InfrastructureError('no docker')):
+            self.assertEqual(self.runner.run(), 2)
+        self.assertEqual(self.runner.report['status'], 'error')
 
-    def test_stale_probe_prevention(self):
-        # Verify that multiple runs generate different nonces/container names
-        import uuid
-        nonce1 = uuid.uuid4().hex[:8]
-        nonce2 = uuid.uuid4().hex[:8]
-        self.assertNotEqual(nonce1, nonce2, "Nonces should be uniquely generated per run to prevent stale probes")
+    def test_redaction(self):
+        self.assertNotIn(self.runner.password, self.runner.redact('password=' + self.runner.password))
 
-    def test_read_before_reinitialize_persistence(self):
-        # The logic in smoke.py asserts that after `docker start`, we immediately
-        # wait for rcon and run assertions WITHOUT initializing a new world.
-        # We can just verify this conceptually as a unit test.
-        self.assertTrue(True, "smoke.py restarts container and asserts before re-running setup")
-
-    def test_skipped_prerequisites(self):
-        # If server_boot fails, subsequent tests aren't run
-        test_cases = []
-        def record_test(name, success, error_msg=""):
-            test_cases.append((name, success, error_msg))
-            
-        try:
-            # Simulate boot failure
-            record_test("server_boot", False, "Timeout")
-            raise Exception("Boot failed")
-            record_test("place_test_block", True)
-        except:
-            pass
-            
-        self.assertEqual(len(test_cases), 1)
-        self.assertEqual(test_cases[0][0], "server_boot")
-
-    def test_junit_xml_generation(self):
-        cases = [
-            ("server_boot", True, ""),
-            ("place_block", False, "Failed to place"),
-        ]
-        xml_path = os.path.join(self.test_dir, "test.xml")
-        smoke.write_junit(cases, xml_path)
-        
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-        self.assertEqual(root.tag, "testsuite")
-        self.assertEqual(root.attrib["tests"], "2")
-        self.assertEqual(len(root.findall("testcase")), 2)
-        
-        failure_case = root.findall("testcase")[1]
-        self.assertIsNotNone(failure_case.find("failure"))
-
-    @patch("sys.argv", ["smoke.py", "--pack-sha", "625ae3bea9775a1757b63265a392a0fcec430fd6", "--output", "out"])
-    def test_missing_eula_rejection(self):
-        with self.assertRaises(SystemExit) as cm:
-            smoke.main()
-        self.assertEqual(cm.exception.code, 1)
-
-    @patch("smoke.subprocess.run")
-    def test_successful_scenario(self, mock_run):
-        # A simple test to ensure that the happy path logic exists
-        self.assertTrue(hasattr(smoke, "main"))
 
 if __name__ == '__main__':
     unittest.main()
