@@ -1,8 +1,11 @@
-# INERT EXAMPLE: copy this file to .github/workflows/smoke.yml in Ch4oS-MVT
-# after reviewing docs/TESTING-PLAN.md. Do not put it in the modpack repository.
-# A green run means lifecycle assertions passed; logs still require review.
-name: Ch4oS lifecycle prototype
+name: Ch4oS Modpack Verification and Testing
+
 on:
+  pull_request:
+    paths:
+      - smoke.py
+      - test_smoke.py
+      - .github/workflows/smoke.yml
   workflow_dispatch:
     inputs:
       pack_sha:
@@ -20,41 +23,56 @@ on:
         required: true
         default: 'itzg/minecraft-server:java21'
         type: string
+
 permissions:
   contents: read
-concurrency:
-  group: ch4os-mvt-lifecycle
-  cancel-in-progress: false
+
 jobs:
+  harness-tests:
+    name: Harness unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out MVT
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test harness without Minecraft
+        run: python3 -m unittest discover -p 'test_*.py' -v
+
   lifecycle:
+    name: Dedicated-server lifecycle
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: harness-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    concurrency:
+      group: ch4os-mvt-lifecycle
+      cancel-in-progress: false
     steps:
       - name: Require explicit EULA acceptance
         env:
           ACCEPT_EULA: ${{ inputs.accept_eula }}
         run: |
           test "$ACCEPT_EULA" = 'true' || { echo 'No Minecraft server launched: EULA not accepted.'; exit 1; }
-      - name: Check out testing repository only
+      - name: Check out MVT
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Test the harness without Minecraft
-        run: python3 -m unittest discover -s examples -p 'test_*.py' -v
       - name: Run isolated lifecycle assertions
         env:
           PACK_SHA: ${{ inputs.pack_sha }}
           SERVER_IMAGE: ${{ inputs.server_image }}
         run: |
-          python3 examples/smoke.py --accept-eula \
+          python3 smoke.py --accept-eula \
             --pack-sha "$PACK_SHA" --image "$SERVER_IMAGE" \
             --heap 4G --container-memory 6g --output mvt-results
-      - name: Preserve workflow provenance and state scope
+      - name: Preserve workflow provenance and scope
         if: always()
         run: |
           mkdir -p mvt-results
           printf '%s\n' "$GITHUB_SHA" > mvt-results/workflow-commit.txt
-          printf '%s\n' 'Lifecycle prototype only. No log baseline or release approval.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'Lifecycle smoke only. No log baseline or release approval.' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload evidence, including on failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
