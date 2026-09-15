@@ -1,0 +1,50 @@
+name: Ch4oS MVT Smoke Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      pack_sha:
+        description: 'Git SHA of the Packwiz pack to test'
+        required: true
+        type: string
+      accept_eula:
+        description: 'I accept the Minecraft EULA (required)'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce EULA
+        if: ${{ !inputs.accept_eula }}
+        run: |
+          echo "You must accept the Minecraft EULA to run this workflow."
+          exit 1
+
+      - name: Checkout Code
+        uses: actions/checkout@v4.2.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5.2.0
+        with:
+          python-version: '3.13'
+
+      - name: Run Smoke Test Harness
+        run: |
+          python3 smoke.py \
+            --accept-eula \
+            --pack-sha ${{ inputs.pack_sha }} \
+            --output mvt-results
+            
+      - name: Upload Test Evidence
+        if: always()
+        uses: actions/upload-artifact@v4.4.0
+        with:
+          name: mvt-results-${{ inputs.pack_sha }}
+          path: mvt-results/
+          retention-days: 7
