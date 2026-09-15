@@ -5,6 +5,8 @@ on:
     paths:
       - smoke.py
       - test_smoke.py
+      - mvt.py
+      - test_mvt.py
       - .github/workflows/smoke.yml
   workflow_dispatch:
     inputs:

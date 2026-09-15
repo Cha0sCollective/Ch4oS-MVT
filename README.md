@@ -17,15 +17,33 @@ The first active suite runs the real NeoForge dedicated-server pack in a disposa
 - proves the restored world keeps ticking, saves again and shuts down cleanly;
 - writes JSON, JUnit, command traces, phase logs and container-state evidence.
 
-A successful lifecycle run is intentionally reported as `lifecycle_passed_logs_unreviewed`. It is **not** release approval. Log baselining, installation caching, upgrade-world fixtures, GameTests, recipe/loot semantics and real-client testing remain later MVT lanes.
+A successful lifecycle run is intentionally reported internally as `lifecycle_passed_logs_unreviewed`. It is **not** release approval. Log baselining, installation caching, upgrade-world fixtures, GameTests, recipe/loot semantics and real-client testing remain later MVT lanes.
 
 See [the testing plan](docs/TESTING-PLAN.md) for the architecture and coverage roadmap.
+
+## Agent-facing interface
+
+Agents should treat MVT as a test appliance, not as code to regenerate for each task. The stable local interface is:
+
+```text
+python mvt.py check <full-pack-commit-sha> --accept-eula --output <new-results-directory>
+```
+
+`mvt.py` is a thin wrapper around the existing `smoke.py` lifecycle harness. It does not reimplement the tests. It preserves the harness exit code and returns a compact JSON result such as:
+
+```json
+{"status":"pass","suite":"lifecycle","pack_sha":"...","minecraft":"1.21.1","neoforge":"21.1.248","checks_passed":10,"checks_total":10,"evidence":"..."}
+```
+
+Use `--format text` for a human-readable one-line result. On failure, the wrapper reports `failed_step` and `detail` so an agent can inspect focused evidence instead of loading the whole lifecycle implementation or complete server logs into context.
+
+See [Agent use of Ch4oS MVT](docs/AGENT-USAGE.md) for the canonical modpack-agent workflow and evidence triage order.
 
 ## GitHub Actions
 
 `.github/workflows/smoke.yml` has two paths:
 
-- Pull requests that change the harness or workflow run the Python unit tests on both Ubuntu and Windows. They do not launch Minecraft and do not require EULA acceptance.
+- Pull requests that change the harness, agent wrapper or workflow run the Python unit tests on both Ubuntu and Windows. They do not launch Minecraft and do not require EULA acceptance.
 - `workflow_dispatch` runs the unit tests and, when the operator explicitly accepts the Minecraft EULA, the disposable dedicated-server lifecycle suite on Ubuntu.
 
 For a manual lifecycle run, open **Actions → Ch4oS Modpack Verification and Testing → Run workflow** and provide:
@@ -54,29 +72,33 @@ Linux/macOS shell:
 python3 -m unittest discover -p 'test_*.py' -v
 ```
 
-After reading and accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula), run the lifecycle suite against an immutable pack commit.
+After reading and accepting the [Minecraft EULA](https://www.minecraft.net/en-us/eula), run the lifecycle suite against an immutable pack commit through the stable wrapper.
 
 PowerShell:
 
 ```powershell
-python smoke.py --accept-eula --pack-sha 625ae3bea9775a1757b63265a392a0fcec430fd6 --output mvt-results-first-run
+python mvt.py check 625ae3bea9775a1757b63265a392a0fcec430fd6 --accept-eula --output mvt-results-first-run
 ```
 
 Linux/macOS shell:
 
 ```sh
-python3 smoke.py --accept-eula \
-  --pack-sha 625ae3bea9775a1757b63265a392a0fcec430fd6 \
-  --output mvt-results-first-run
+python3 mvt.py check 625ae3bea9775a1757b63265a392a0fcec430fd6 \
+  --accept-eula --output mvt-results-first-run
 ```
+
+`smoke.py` remains the authoritative lifecycle implementation and can still be invoked directly for MVT development. Ordinary modpack automation should prefer `mvt.py check`.
 
 The output directory must not already exist. The default 4 GiB Java heap and 6 GiB container limit are exploratory settings, not measured sizing guarantees for the full pack.
 
 ## Result semantics
 
-- Exit `0`: all implemented lifecycle assertions passed; logs are still unreviewed.
-- Exit `1`: a pack/server assertion failed.
-- Exit `2`: infrastructure or another execution error prevented valid passing evidence.
-- A skipped/not-run check is never treated as a pass.
+The stable `mvt.py` result uses:
 
-Do not weaken assertions, silently remove mods, refresh Packwiz metadata, or bless a new baseline merely to make a candidate green. Add reproducible regressions as checked-in tests instead.
+- `status=pass`: all implemented lifecycle assertions passed; logs are still unreviewed.
+- `status=fail`: a pack/server assertion failed.
+- `status=error`: infrastructure or another execution error prevented valid passing evidence.
+
+The process exit code remains `0` for pass, `1` for assertion failure and `2` for infrastructure/execution error. A skipped/not-run check is never treated as a pass.
+
+Do not weaken assertions, silently remove mods, refresh Packwiz metadata, regenerate the lifecycle harness, or bless a new baseline merely to make a candidate green. Add reproducible regressions as checked-in tests instead.
