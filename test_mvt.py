@@ -76,6 +76,20 @@ class AgentInterface(unittest.TestCase):
         self.assertEqual(summary["failed_step"], "boot_fresh")
         self.assertEqual(summary["detail"], "server exited")
 
+    def test_cleanup_error_is_reported_directly(self):
+        self.write_report({
+            "status": "error",
+            "pack_sha": "a" * 40,
+            "versions": {"minecraft": "1.21.1", "neoforge": "21.1.248"},
+            "tests": [{"name": "prepare", "status": "passed"}],
+            "cleanup_errors": ["Docker rm exited 1"],
+        })
+        result = SimpleNamespace(returncode=2, stdout="", stderr="")
+        summary = mvt.summarize(mvt.read_report(self.output), result, self.output)
+        self.assertEqual(summary["status"], "error")
+        self.assertEqual(summary["failed_step"], "cleanup")
+        self.assertEqual(summary["detail"], "Docker rm exited 1")
+
     @patch("mvt.subprocess.run")
     def test_check_preserves_smoke_exit_code_and_emits_json(self, mock_run):
         self.write_report({
