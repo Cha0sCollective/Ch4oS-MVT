@@ -69,7 +69,7 @@ class Runner:
         self.phase = ""
         self.since = ""
         self.out = Path(args.output).resolve()
-        self.out.mkdir(parents=True, exist_ok=False)  # Never overwrite old evidence.
+        self.out.mkdir(parents=True, exist_ok=False)
         self.report = {
             "schema": 1, "suite": "lifecycle-prototype-v1", "pack_repository": REPO,
             "pack_sha": args.pack_sha, "status": "running",
@@ -89,8 +89,15 @@ class Runner:
 
     def docker(self, *args: str, timeout: int = 30, check: bool = True) -> str:
         try:
-            result = subprocess.run(["docker", *args], stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, timeout=timeout)
+            result = subprocess.run(
+                ["docker", *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             # Never stringify subprocess command arguments: they may hold a password.
             raise InfrastructureError(f"Docker {args[0]} unavailable/timed out ({type(exc).__name__})") from exc
@@ -323,7 +330,12 @@ class Runner:
                 code = code or 2
             self.report["status"] = {0: "lifecycle_passed_logs_unreviewed", 1: "failed", 2: "error"}[code]
             self.write_reports()
-        print(json.dumps({"status": self.report["status"], "output": str(self.out), "release_gate_approved": False}))
+        summary = {"status": self.report["status"], "output": str(self.out)}
+        failed = next((item for item in self.report["tests"] if item["status"] in ("failed", "error")), None)
+        if failed is not None:
+            summary["failed_step"] = failed["name"]
+            summary["detail"] = failed.get("detail", "")
+        print(json.dumps(summary))
         return code
 
 
@@ -344,6 +356,9 @@ def main() -> int:
     for value in (args.heap, args.container_memory):
         if not re.fullmatch(r"[1-9]\d*[gGmM]", value):
             parser.error("Memory values must be positive whole G or M units")
+    output = Path(args.output)
+    if output.exists():
+        parser.error(f"Output path already exists: {output.resolve()}. Choose another --output or remove it.")
     def interrupt(signum, frame):
         raise InfrastructureError(f"Interrupted by signal {signum}")
     signal.signal(signal.SIGTERM, interrupt)
