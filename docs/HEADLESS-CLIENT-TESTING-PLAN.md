@@ -1,6 +1,6 @@
 # Extend MVT with headless client testing
 
-Status: Proposed; saved for later review on 2026-09-22; revised on 2026-10-09 to define pack-independent inputs and runtime-selected mod test adapters. This document does not implement or validate the proposed suites or adapters.
+Status: Implementation added on 2026-10-10; live feasibility and calibration remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters. See [implemented commands, worker setup and remaining acceptance](HEADLESS-USAGE.md). The dedicated Linux worker and licensed account are not available yet, so no real client run or authenticated join has been validated.
 
 ## Summary
 
@@ -10,6 +10,14 @@ Generalize MVT to NeoForge packs running Minecraft 1.21.1, then add two suites a
 - **Client–server smoke:** authenticate, join a disposable server, verify interactions and synchronization, reconnect, and verify persistence after restart.
 
 Use one licensed test account, an isolated Linux worker, and a small MVT-only client automation mod. Headless execution may use an invisible virtual display and software OpenGL; screenshots, visual assertions, and graphics performance testing are explicitly outside MVT.
+
+Approved addition (2026-10-10): support explicit `development` client mode using
+NeoForge's development player and an isolated offline-mode disposable server.
+It reports authentication as `NOT_TESTED`; the licensed authenticated lane remains
+separate. This enables worker-based client/gameplay checks without setting up a
+test account and does not assert a license exemption. Implementation/build work
+proceeds while worker-based feasibility remains pending; the original feasibility
+and calibration requirements below still apply before adopting a release gate.
 
 Keep the core lifecycle and interaction tests independent of individual mods. Select additional mod-specific test adapters at runtime from the installed mod inventory, starting with Create. Support the exact NeoForge version declared by each pack when it is compatible with Minecraft 1.21.1 and MVT's test components; do not substitute a newer loader automatically. Forge, Fabric, other loaders, and other Minecraft versions are outside scope.
 

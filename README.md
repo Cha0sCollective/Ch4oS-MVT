@@ -17,9 +17,22 @@ The first active suite runs the real NeoForge dedicated-server pack in a disposa
 - proves the restored world keeps ticking, saves again and shuts down cleanly;
 - writes JSON, JUnit, command traces, phase logs and container-state evidence.
 
-A successful lifecycle run is intentionally reported as `lifecycle_passed_logs_unreviewed`. It is **not** release approval. Log baselining, installation caching, upgrade-world fixtures, GameTests, recipe/loot semantics and real-client testing remain later MVT lanes.
+A successful lifecycle run is intentionally reported as `lifecycle_passed_logs_unreviewed`. It is **not** release approval. Log baselining, upgrade-world fixtures, GameTests and recipe/loot semantics remain later MVT lanes.
 
 See [the testing plan](docs/TESTING-PLAN.md) for the architecture and coverage roadmap.
+
+## Opt-in expanded suites
+
+`python -m mvt` adds verified Packwiz/Prism imports, vanilla core tests, runtime-selected
+Create adapters, and headless `client-smoke` / `client-server-smoke` suites for
+Minecraft 1.21.1 and exact NeoForge 21.1.x versions. Development mode uses an
+isolated offline-mode server and reports authentication as untested. Authenticated
+mode requires a dedicated licensed account and private Prism profile. Neither
+mode performs graphical testing.
+
+The new code is build-tested; live worker validation and calibration are pending.
+See [setup, commands and acceptance checks](docs/HEADLESS-USAGE.md). The existing
+`smoke.py` CLI, report contract and Ch4oS Packwiz release workflow remain unchanged.
 
 ## GitHub Actions
 

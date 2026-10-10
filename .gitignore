@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.mvt-cache/
+mvt-results*/
+.gradle/
+build/
+run/
+*.log

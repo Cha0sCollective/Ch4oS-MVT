@@ -1,0 +1,2 @@
+worker/*.sh text eol=lf
+worker/Dockerfile text eol=lf
