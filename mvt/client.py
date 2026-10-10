@@ -17,6 +17,7 @@ from .errors import AuthRequired, CheckFailed, InfrastructureError, Unsupported
 from .inputs import audit
 from .adapters import inventory
 from .files import read_regular, safe_tree
+from .mounts import game_mount
 from .protocol import Control
 from .report import sanitize
 
@@ -45,7 +46,9 @@ class Client:
         self.root = pack.roots["client"]
         self.image_id = None
         safe_tree(self.root)
-        self.expected_mods = inventory(self.root)
+        self.loader_libraries = []
+        self.expected_normalizations = {}
+        self.expected_mods = inventory(self.root, libraries=self.loader_libraries, normalizations=self.expected_normalizations)
         self._state_checked = 0
         self._running = True
         self.account_lock = None
@@ -54,6 +57,8 @@ class Client:
     def prepare(self, verify_installation=True):
         if platform.system() != "Linux":
             raise Unsupported("Headless client suites require the isolated Linux worker; server suites also work locally")
+        if os.environ.get("MVT_SHARED_VOLUME") and self.options.client_mode != "development":
+            raise Unsupported("The containerized local worker supports development mode; authenticated mode needs the dedicated Linux Prism worker")
         if not self.options.client_image:
             raise Unsupported("Provide a prepared --client-image for the pack's exact NeoForge version")
         image = json.loads(docker("image", "inspect", self.options.client_image))[0]
@@ -107,6 +112,9 @@ class Client:
             self.own_network = True
         return {"image_id": self.image_id, "image_digests": image.get("RepoDigests", []),
                 "mode": self.options.client_mode, "protocol": 1,
+                "headless_profile": {"render_distance": 2, "simulation_distance": 5, "max_fps": 20,
+                                     "pause_on_focus_loss": False},
+                "development_heap_percentage": 50 if self.options.client_mode == "development" else None,
                 "authentication": "NOT_TESTED" if self.options.client_mode == "development" else "REQUIRED",
                 "automation_sha256": hashlib.sha256(Path(self.options.automation_jar).read_bytes()).hexdigest() if self.options.client_mode == "authenticated" else automation_hash}
 
@@ -117,9 +125,10 @@ class Client:
                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
                    "--memory", self.options.client_memory, "--memory-swap", self.options.client_memory,
                    "--tmpfs", "/tmp:rw,exec,nosuid,size=1g,mode=1777",
-                   "--mount", f"type=bind,src={self.root},dst=/game",
-                   "--mount", f"type=bind,src={self.control.directory},dst=/control",
+                   "--mount", game_mount(self.root, "/game"),
+                   "--mount", game_mount(self.control.directory, "/control"),
                    "-e", "MVT_CONTROL_DIR=/control", "-e", "MVT_RUN_ID="+self.control.run_id,
+                   "-e", "MVT_CLIENT_MODE="+self.options.client_mode,
                    "-e", "LIBGL_ALWAYS_SOFTWARE=true", "-e", "GALLIUM_DRIVER=llvmpipe",
                    "-e", "ALSOFT_DRIVERS=null", "-e", "HOME=/tmp"]
         if self.options.client_mode == "development":
@@ -156,7 +165,11 @@ class Client:
                                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             except OSError as exc:
                 raise InfrastructureError("Prism or Xvfb is unavailable") from exc
-        self.control.until(lambda s: s.get("title_ready"), timeout=self.options.boot_timeout)
+        def title_ready(state):
+            if self.options.client_mode == "development" and state.get("gametest_enabled") is not False:
+                raise Unsupported("Development gameplay runtime must disable automatic bundled GameTests")
+            return state.get("title_ready")
+        self.control.until(title_ready, timeout=self.options.boot_timeout)
 
     def alive(self):
         if self.options.client_mode == "authenticated" and not self.started:
@@ -222,6 +235,13 @@ class Client:
                     errors.append("Could not verify client container ownership for cleanup")
                 self.started = False
         if self.started:
+            try:
+                state = json.loads(docker("inspect", "--format", "{{json .State}}", self.name))
+                safe_state = {key: state.get(key) for key in
+                              ("Status", "Running", "OOMKilled", "ExitCode", "StartedAt", "FinishedAt")}
+                (self.evidence / f"{self.name}-state.json").write_text(json.dumps(safe_state, indent=2))
+            except Exception as exc:
+                errors.append("Could not export client state: " + type(exc).__name__)
             if self.options.client_mode == "development":
                 try:
                     logs = docker("logs", self.name)

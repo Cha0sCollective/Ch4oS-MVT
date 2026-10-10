@@ -12,11 +12,11 @@ import zipfile
 from .errors import CheckFailed, Unsupported
 
 
-def inventory(root: Path) -> dict[str, str]:
+def inventory(root: Path, *, libraries: list[dict] | None = None, normalizations: dict | None = None) -> dict[str, str]:
     result: dict[str, str] = {}
     direct: set[str] = set()
 
-    def inspect(data: bytes, depth: int = 0) -> None:
+    def inspect(data: bytes, depth: int = 0, artifact: str = "") -> None:
         if depth > 4:
             raise Unsupported("Nested mod archive limit exceeded")
         with zipfile.ZipFile(io.BytesIO(data)) as jar:
@@ -24,10 +24,27 @@ def inventory(root: Path) -> dict[str, str]:
                 metadata = tomllib.loads(jar.read("META-INF/neoforge.mods.toml").decode("utf-8"))
                 manifest = jar.read("META-INF/MANIFEST.MF").decode("utf-8", "replace") if "META-INF/MANIFEST.MF" in jar.namelist() else ""
                 match = re.search(r"^Implementation-Version: (.+)$", manifest, re.MULTILINE)
+                type_match = re.search(r"^FMLModType: (.+)$", manifest, re.MULTILINE)
+                kind = type_match.group(1).strip() if type_match else "MOD"
+                if kind not in ("MOD", "LIBRARY", "GAMELIBRARY", "LANGPROVIDER"):
+                    raise Unsupported("Unknown FML archive type")
+                declared = {}
                 for mod in metadata.get("mods", []):
                     identity, version = mod["modId"], str(mod.get("version", ""))
                     if version == "${file.jarVersion}":
                         version = match.group(1).strip() if match else "unknown"
+                    if kind in ("LIBRARY", "LANGPROVIDER"):
+                        declared[identity] = version
+                        continue  # Loader services are not ModList gameplay mods.
+                    if metadata.get("properties", {}).get("connector:placeholder") is True:
+                        if "fabric.mod.json" not in jar.namelist():
+                            raise CheckFailed("Connector placeholder lacks its Fabric metadata")
+                        fabric = json.loads(jar.read("fabric.mod.json"))
+                        if fabric.get("id", "").replace("-", "_") != identity or fabric.get("version") != version:
+                            raise CheckFailed("Connector placeholder disagrees with its source metadata")
+                        if normalizations is not None:
+                            normalizations[identity] = {"source_version": version, "runtime_version": version.replace("+", "_"),
+                                                       "loader": "connector", "rule": "placeholder_plus_to_underscore"}
                     if depth == 0:
                         if identity in direct:
                             raise CheckFailed(f"Duplicate top-level installed mod ID: {identity}")
@@ -38,16 +55,19 @@ def inventory(root: Path) -> dict[str, str]:
                         candidates = set(previous.removeprefix("jarjar_candidates:").split("|")) if previous else set()
                         candidates.add(version)
                         result[identity] = version if len(candidates) == 1 else "jarjar_candidates:"+"|".join(sorted(candidates))
+                if declared and libraries is not None:
+                    libraries.append({"artifact": artifact, "kind": kind, "declared_ids": declared,
+                                      "coverage": "installed_hash_audited; not a ModList gameplay mod"})
             if "META-INF/jarjar/metadata.json" in jar.namelist():
                 for entry in json.loads(jar.read("META-INF/jarjar/metadata.json")).get("jars", []):
                     info = jar.getinfo(entry["path"])
                     if info.file_size > 256 * 1024 * 1024:
                         raise Unsupported("Nested mod archive is too large")
-                    inspect(jar.read(info), depth + 1)
+                    inspect(jar.read(info), depth + 1, artifact+"!/"+entry["path"])
 
     for path in sorted((root / "mods").glob("*.jar")):
         try:
-            inspect(path.read_bytes())
+            inspect(path.read_bytes(), artifact=path.name)
         except (zipfile.BadZipFile, KeyError, ValueError) as exc:
             raise CheckFailed(f"Cannot inspect installed mod JAR: {path.name}") from exc
     return result

@@ -1,0 +1,10 @@
+FROM docker:29.7.2-cli@sha256:3f4743208d2338c934d7b8bcfbe1bb54c0b2355c510ad5e0f31c0c4a54bd704e AS dockercli
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY smoke.py /opt/mvt/smoke.py
+COPY mvt /opt/mvt/mvt
+COPY worker/runner.py /opt/mvt/runner.py
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MVT_SHARED_ROOT=/mvt-worker
+WORKDIR /opt/mvt
+LABEL org.cha0s.mvt.worker="development"
+ENTRYPOINT ["python3", "/opt/mvt/runner.py"]

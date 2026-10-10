@@ -13,10 +13,15 @@ from mvt.errors import CheckFailed, Unsupported
 from mvt.inputs import Cache, audit, packwiz, pinned_source, prism, runtime, safe_path
 
 
-def modjar(mod_id="example", version="1.0", nested=None):
+def modjar(mod_id="example", version="1.0", nested=None, kind=None, connector=False):
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as z:
-        z.writestr("META-INF/neoforge.mods.toml", f'[[mods]]\nmodId="{mod_id}"\nversion="{version}"\n')
+        properties = '[properties]\n"connector:placeholder"=true\n' if connector else ''
+        z.writestr("META-INF/neoforge.mods.toml", properties+f'[[mods]]\nmodId="{mod_id}"\nversion="{version}"\n')
+        if connector:
+            z.writestr("fabric.mod.json", json.dumps({"id": mod_id, "version": version}))
+        if kind:
+            z.writestr("META-INF/MANIFEST.MF", f"Manifest-Version: 1.0\r\nFMLModType: {kind}\r\n\r\n")
         if nested:
             z.writestr("META-INF/jarjar/metadata.json", json.dumps({"jars": [{"path": "nested.jar"}]}))
             z.writestr("nested.jar", nested)
@@ -153,6 +158,35 @@ class InputTests(unittest.TestCase):
         (root / "mods" / "one.jar").write_bytes(modjar("one", nested=modjar("dependency", "1.0")))
         (root / "mods" / "two.jar").write_bytes(modjar("two", nested=modjar("dependency", "1.1")))
         self.assertEqual(inventory(root)["dependency"], "jarjar_candidates:1.0|1.1")
+
+    def test_loader_library_is_recorded_without_false_gameplay_coverage(self):
+        root = self.root / "pack"
+        (root / "mods").mkdir(parents=True)
+        (root / "mods" / "defaults.jar").write_bytes(modjar("configureddefaults", "21.1.3", kind="LIBRARY"))
+        # A declared Create ID in a library must never activate gameplay tests.
+        (root / "mods" / "library.jar").write_bytes(modjar("create", "6.0.10", kind="LIBRARY"))
+        libraries = []
+        mods = inventory(root, libraries=libraries)
+        self.assertEqual(mods, {})
+        self.assertEqual(libraries[0]["declared_ids"], {"configureddefaults": "21.1.3"})
+        self.assertEqual(libraries[0]["kind"], "LIBRARY")
+        self.assertFalse(select("auto", {"client": mods})[0])
+        (root / "mods" / "actual-create.jar").write_bytes(modjar("create", "6.0.10"))
+        self.assertEqual(inventory(root), {"create": "6.0.10"})
+        self.assertEqual([a.name for a in select("auto", {"client": inventory(root)})[0]], ["create"])
+
+    def test_connector_normalization_retains_source_version(self):
+        root = self.root / "pack"
+        (root / "mods").mkdir(parents=True)
+        (root / "mods" / "continuity.jar").write_bytes(modjar("continuity", "3.0.0+1.21.neoforge", connector=True))
+        changes = {}
+        self.assertEqual(inventory(root, normalizations=changes)["continuity"], "3.0.0+1.21.neoforge")
+        self.assertEqual(changes["continuity"]["runtime_version"], "3.0.0_1.21.neoforge")
+        # Native NeoForge versions must never inherit a Connector conversion.
+        (root / "mods" / "native.jar").write_bytes(modjar("native", "1.0+extra"))
+        changes = {}
+        inventory(root, normalizations=changes)
+        self.assertNotIn("native", changes)
 
 
 if __name__ == "__main__":

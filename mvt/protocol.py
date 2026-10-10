@@ -52,6 +52,7 @@ class Control:
                     if any(response.get(k) != request[k] for k in ("protocol", "run_id", "request_id", "sequence")):
                         raise InfrastructureError("Client protocol identity/order mismatch")
                     if response.get("status") == "failed":
+                        self.trace({"event": "failure", **response})
                         raise CheckFailed("Client assertion/action failed: " + str(response.get("detail", "unknown")))
                     if response.get("status") != "completed" or not isinstance(response.get("result"), dict):
                         raise InfrastructureError("Invalid client completion response")

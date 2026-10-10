@@ -9,6 +9,7 @@ from smoke import Runner
 from .adapters import Adapter
 from .errors import CheckFailed
 from .inputs import Pack, audit
+from .mounts import game_mount
 from .report import sanitize
 
 
@@ -38,12 +39,13 @@ class Server(Runner):
                "NEOFORGE_VERSION": self.pack.neoforge, "INIT_MEMORY": "1G", "MAX_MEMORY": self.args.heap,
                "ENABLE_RCON": "TRUE", "RCON_PASSWORD": self.password,
                "ONLINE_MODE": "FALSE" if self.development else "TRUE", "LEVEL": "world", "SEED": "8675309",
+               "SPAWN_PROTECTION": "0", "DIFFICULTY": "peaceful",
                "VIEW_DISTANCE": "4", "SIMULATION_DISTANCE": "4", "ENABLE_AUTOPAUSE": "FALSE",
                "ENABLE_AUTOSTOP": "FALSE", "OVERRIDE_SERVER_PROPERTIES": "TRUE"}
         # Installation needs internet. Attach the private scenario network only after boot.
         command = ["create", "--name", self.name, "--label", "ch4os.mvt=disposable", "--restart=no",
                    "--stop-timeout", "120", "--memory", self.args.container_memory,
-                   "--memory-swap", self.args.container_memory, "--mount", f"type=bind,src={root},dst=/data"]
+                   "--memory-swap", self.args.container_memory, "--mount", game_mount(root, "/data")]
         for key, value in env.items():
             command += ["-e", f"{key}={value}"]
         self.docker(*command, image["Id"])

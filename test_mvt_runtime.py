@@ -87,6 +87,9 @@ class RuntimeTests(unittest.TestCase):
         self.responder(control, lambda value: {**value, "status": "failed", "detail": "fixture mismatch"})
         with self.assertRaises(CheckFailed):
             control.call("place", timeout=2)
+        trace = [json.loads(line) for line in control.trace_path.read_text().splitlines()]
+        self.assertEqual(trace[-1]["event"], "failure")
+        self.assertEqual(trace[-1]["detail"], "fixture mismatch")
 
     def test_report_zero_skipped_cleanup_and_auth_fail_closed(self):
         self.assertEqual(Report(self.root / "zero", "x", []).finish(), 2)
@@ -198,6 +201,79 @@ class RuntimeTests(unittest.TestCase):
             client = SimpleNamespace(control=Channel(), options=SimpleNamespace(boot_timeout=1))
             with self.subTest(reason=reason), self.assertRaises(error):
                 Session(client, [], 123).ready()
+
+    def test_neoforge_mismatch_screen_fails_without_vanilla_disconnect_reason(self):
+        class Channel:
+            def until(self, predicate, **kwargs):
+                predicate({"world_ready": False, "screen": "ModMismatchDisconnectedScreen"})
+        client = SimpleNamespace(control=Channel(), options=SimpleNamespace(boot_timeout=900))
+        with self.assertRaisesRegex(CheckFailed, "mod-channel negotiation"):
+            Session(client, [], 123).ready()
+
+    def test_connector_version_conversion_requires_loader_and_exact_source(self):
+        state = {"world_ready": True, "uuid": "12345678-1234-1234-1234-123456789abc",
+                 "dimension": "minecraft:overworld", "mods": {"neoforge": "21.1.248", "connector": "2.0.0-beta.17+1.21.1",
+                                                            "continuity": "3.0.0_1.21.neoforge"}}
+        class Channel:
+            def until(self, predicate, **kwargs):
+                predicate(state)
+                return state
+        client = SimpleNamespace(control=Channel(), options=SimpleNamespace(boot_timeout=1),
+                                 pack=SimpleNamespace(neoforge="21.1.248"), expected_mods={"continuity": "3.0.0+1.21.neoforge"},
+                                 expected_normalizations={"continuity": {"source_version": "3.0.0+1.21.neoforge",
+                                                         "runtime_version": "3.0.0_1.21.neoforge", "loader": "connector"}})
+        Session(client, [], 123).ready()
+        state["mods"]["continuity"] = "3.0.1_1.21.neoforge"
+        with self.assertRaises(CheckFailed):
+            Session(client, [], 123).ready()
+        state["mods"]["continuity"] = "3.0.0_1.21.neoforge"
+        del state["mods"]["connector"]
+        with self.assertRaises(CheckFailed):
+            Session(client, [], 123).ready()
+
+    def test_setup_accepts_already_creative_but_requires_proven_game_mode(self):
+        for initial, change_works in ((True, True), (False, True), (False, False)):
+            with self.subTest(initial=initial, change_works=change_works):
+                mode = [initial]
+                commands = []
+                def command(value):
+                    commands.append(value)
+                    if value.startswith(("give ", "clear ", "gamemode ")):
+                        raise CheckFailed("Player-only arguments reject raw entity UUIDs")
+                    if value.endswith("if entity @s[gamemode=creative]") and not mode[0]:
+                        raise CheckFailed("Player is not creative")
+                    if "run gamemode creative @s" in value:
+                        self.assertFalse(mode[0], "Minecraft rejects a no-op gamemode change")
+                        mode[0] = change_works
+                class Channel:
+                    def until(self, predicate, **kwargs):
+                        self_state = {"inventory": []}
+                        if not predicate(self_state):
+                            raise CheckFailed("Inventory not empty")
+                        return self_state
+                session = Session(SimpleNamespace(control=Channel()), [], 123, SimpleNamespace(check_command=command, rcon=lambda c: None))
+                session.uuid = "12345678-1234-1234-1234-123456789abc"
+                if initial or change_works:
+                    session.setup()
+                    self.assertEqual(sum("run gamemode creative @s" in c for c in commands), int(not initial))
+                    self.assertTrue(any("run give @s minecraft:gold_block 1" in c for c in commands))
+                else:
+                    with self.assertRaises(CheckFailed):
+                        session.setup()
+
+    def test_integrated_save_requires_flush_completion(self):
+        calls = []
+        for result in ({}, {"success": 0}, {"success": 1}):
+            def call(operation, **kwargs):
+                calls.append(operation)
+                return result
+            session = Session(SimpleNamespace(control=SimpleNamespace(call=call)), [], 123)
+            if result.get("success") == 1:
+                session.save()
+            else:
+                with self.assertRaises(CheckFailed):
+                    session.save()
+        self.assertEqual(calls, ["save_world"] * 3)
 
     def test_persistence_checks_do_not_reseed_and_disagreement_fails(self):
         commands = []

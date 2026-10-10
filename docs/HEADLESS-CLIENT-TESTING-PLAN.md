@@ -1,6 +1,6 @@
 # Extend MVT with headless client testing
 
-Status: Implementation added on 2026-10-10; live feasibility and calibration remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters. See [implemented commands, worker setup and remaining acceptance](HEADLESS-USAGE.md). The dedicated Linux worker and licensed account are not available yet, so no real client run or authenticated join has been validated.
+Status: Implementation and a local Docker Linux development worker added on 2026-10-10. Create Ch4oS passed the single-player suite; its client-server join was blocked by Create Abyss's development-only networking on the client versus the production server. See the [live validation report](LOCAL-WORKER-VALIDATION.md) and [implemented commands, worker setup and remaining acceptance](HEADLESS-USAGE.md). Full calibration and licensed authenticated joins remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters.
 
 ## Summary
 
@@ -16,8 +16,8 @@ NeoForge's development player and an isolated offline-mode disposable server.
 It reports authentication as `NOT_TESTED`; the licensed authenticated lane remains
 separate. This enables worker-based client/gameplay checks without setting up a
 test account and does not assert a license exemption. Implementation/build work
-proceeds while worker-based feasibility remains pending; the original feasibility
-and calibration requirements below still apply before adopting a release gate.
+now includes a local Docker Linux worker; the original feasibility and calibration
+requirements below still apply before adopting a release gate.
 
 Keep the core lifecycle and interaction tests independent of individual mods. Select additional mod-specific test adapters at runtime from the installed mod inventory, starting with Create. Support the exact NeoForge version declared by each pack when it is compatible with Minecraft 1.21.1 and MVT's test components; do not substitute a newer loader automatically. Forge, Fabric, other loaders, and other Minecraft versions are outside scope.
 

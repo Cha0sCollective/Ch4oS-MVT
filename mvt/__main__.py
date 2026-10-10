@@ -134,7 +134,7 @@ def execute(options, server, first, clients, step, adapters, work, report):
         step("reconnect", lambda: enter(first, "join"))
         step("verify_reconnect", session.verify)
     else:
-        step("save_world", lambda: session.command("save-all flush"))
+        step("save_world", session.save)
     step("quit_client", first.quit)
     if server:
         step("save_server", server.save)
@@ -188,9 +188,12 @@ def main(argv=None):
             pack, sides = report.step("input", get_input)
             report.data["pack"] = pack.evidence()
             def get_adapters():
-                inventories = {side: inventory(pack.roots[side]) for side in sides}
+                libraries = {side: [] for side in sides}
+                normalizations = {side: {} for side in sides}
+                inventories = {side: inventory(pack.roots[side], libraries=libraries[side], normalizations=normalizations[side]) for side in sides}
                 selected, coverage = select(options.adapters, inventories)
-                report.data.update(installed_mods=inventories, adapters=coverage)
+                report.data.update(installed_mods=inventories, loader_libraries=libraries,
+                                   loader_normalizations=normalizations, adapters=coverage)
                 return selected
             adapters = report.step("inventory", get_adapters)
             if options.command == "run":

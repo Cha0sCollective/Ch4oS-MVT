@@ -30,7 +30,8 @@ isolated offline-mode server and reports authentication as untested. Authenticat
 mode requires a dedicated licensed account and private Prism profile. Neither
 mode performs graphical testing.
 
-The new code is build-tested; live worker validation and calibration are pending.
+A local Docker development worker is available through `worker/local.ps1`,
+including on Windows with Docker Desktop Linux containers. Full calibration is pending.
 See [setup, commands and acceptance checks](docs/HEADLESS-USAGE.md). The existing
 `smoke.py` CLI, report contract and Ch4oS Packwiz release workflow remain unchanged.
 

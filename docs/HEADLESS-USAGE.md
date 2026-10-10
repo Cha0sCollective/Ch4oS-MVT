@@ -1,16 +1,17 @@
 # Expanded headless suites
 
 Implementation status (2026-10-10): the runner, verified installer, control mod,
-worker definition and workflows are implemented. Python regression tests pass and
-the mod builds against NeoForge 21.1.233 and 21.1.248. **No live client run or
-calibration has been completed.** The Linux worker and licensed test account are
-not provisioned yet. Do not use these suites as a release gate until the
-calibration checklist below passes.
+local Docker Linux worker and workflows are implemented. The pinned Create Ch4oS
+single-player suite passed gameplay, save/reload persistence and clean shutdown.
+The client-server join was rejected by Create Abyss's development-only channel;
+see the [live validation report](LOCAL-WORKER-VALIDATION.md). The licensed account, CI execution and
+full calibration remain pending. Do not use these suites as a release gate until
+the calibration checklist below passes.
 
-Local validation: 44 Python tests passed (including all 15 original harness tests),
-and both Java 21 builds plus prepared launch export succeeded. Orchestration tests
-use explicit simulated clients/servers and are not evidence of a live game pass.
-The worker Dockerfile and CI workflows have not yet been executed on a worker.
+Local validation: 53 Python tests passed on Windows and Linux (including all 15
+original harness tests), and Java 21 builds plus prepared launch export succeeded
+against NeoForge 21.1.233 and 21.1.248. Orchestration unit tests use explicit
+simulated clients/servers; live game results are reported separately.
 
 `smoke.py`, its schema-1 report, exit codes and original workflow are unchanged.
 The Ch4oS Packwiz release process continues to call that entry point at its
@@ -93,6 +94,15 @@ adapters. Selected client mod versions are confirmed after the world loads.
 Shared JarJar dependency versions are recorded as installed candidates, rather
 than rejected as duplicate top-level mods. The client snapshot confirms the
 version the loader actually selected. Duplicate top-level mod IDs remain an error.
+Archives declaring FML `LIBRARY` or `LANGPROVIDER` are recorded separately under
+`loader_libraries`; their installed bytes are hash-audited, and they cannot
+activate gameplay adapters. They are not required to appear in NeoForge's
+gameplay `ModList`, and their individual service behavior has no focused coverage.
+Connector placeholder archives retain their source versions in the inventory.
+When their verified Fabric metadata agrees and Connector is loaded, MVT also
+accepts Connector's exact `+` to `_` runtime-version conversion and records it in
+`loader_normalizations`. This does not permit a different mod version or a
+different Minecraft loader.
 
 ## Development and authenticated clients
 
@@ -106,6 +116,13 @@ it does not test Microsoft sign-in, entitlement, Mojang session authentication o
 the production launcher environment. NeoForge's development player and the
 offline-mode prerequisite are described in its [development setup documentation](https://docs.neoforged.net/docs/1.21.1/gettingstarted/).
 This is not a special license exemption; follow the [Minecraft EULA](https://www.minecraft.net/en-us/eula).
+
+Mods can gate content and networking on `FMLEnvironment.production`. A development
+client can therefore expose experimental registries/channels absent from a
+production dedicated server, even with identical JARs and loader versions. Report
+that compatibility blocker without treating it as a confirmed production pack
+regression. The current Ch4oS candidate has this limitation through Create Abyss
+bundled in Create Submarine; a matching development-server lane is future work.
 
 `--client-mode authenticated` requires an existing dedicated licensed Java account,
 interactive sign-in to a dedicated Prism root, its account profile name and the
@@ -132,6 +149,44 @@ do not remove its mods to obtain a pass.
 
 ## Provision and run the worker
 
+### Local Docker worker on Windows
+
+Docker Desktop in Linux-container mode can host the entire development worker.
+From the repository root in PowerShell, after accepting the Minecraft EULA:
+
+```powershell
+./worker/local.ps1 -PackSha FULL_COMMIT_SHA -AcceptEula
+```
+
+The script resolves the exact NeoForge version from that immutable Packwiz
+manifest, builds the client image if missing, builds the trusted supervisor,
+and runs `client-smoke` followed by `client-server-smoke`. Use `-Suite` to select
+one, `-BuildClient` after changing the automation mod or client Dockerfile, and
+`-Output` for a new evidence directory. `-PackRepo` and `-PackPath` select other
+supported Packwiz sources. This helper runs development mode only.
+
+The supervisor uses Docker's socket to create sibling game containers; only
+trusted MVT code runs in it. Candidate game containers receive no Docker socket,
+Windows folder, account store, or published port. A named volume holds verified
+downloads and temporary installs. Docker Engine 26+ `volume-subpath` mounts expose
+only the individual game/control directories, never the full worker volume.
+The script records supervisor/client image IDs in `worker-run.json`, exports
+reports to Windows and removes completed supervisor containers;
+the harness removes its game containers, networks and temporary worlds. The
+images and `mvt-worker-data` download cache remain available for the next run.
+
+The helper defaults to an 8G client container and a 4G server heap in a 6G server
+container, plus a 1G supervisor. The development JVM uses 50% of its container
+limit, leaving room for native allocations and software OpenGL. The automation
+applies a recorded headless profile: render distance 2, simulation distance 5,
+20 FPS, VSync off and no pause on focus loss. These settings apply only to the
+temporary client. Check Docker's available memory before running;
+`-ClientMemory`, `-ServerMemory` and `-ServerHeap` override these limits. Do not
+publish the client image, which contains Minecraft dependencies. A licensed Prism
+account is not required by this development launch; authentication remains untested.
+
+### Dedicated Linux worker
+
 Use a dedicated Linux machine/VM with Docker, Python 3.11+, a Docker CLI, sufficient
 disk and approximately 20 GiB or more available memory for a full client/server
 pack. The 6G server heap/8G server and client container limits are defaults for
@@ -151,6 +206,11 @@ docker build -f worker/Dockerfile --build-arg NEOFORGE_VERSION=21.1.248 \
 
 The build pins Java 21 and Gradle 8.14.4, prepares NeoForge's development runtime
 and exports the plugin-generated Java command without launching Minecraft. No
+automatic bundled GameTests are registered in the development gameplay lane.
+The image includes the clean mapped vanilla artifact needed by Sinytra Connector
+in development mode. These are launcher settings; candidate mod JARs stay intact.
+The disposable dedicated world uses peaceful difficulty and zero spawn protection
+so normal client placement can exercise fixtures without operator privileges. No
 account is used during build. The image contains private game dependencies: do
 not publish it or redistribute Minecraft files. Record the resulting image ID
 and use a reviewed digest when moving it between private workers. Client image

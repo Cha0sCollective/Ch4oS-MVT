@@ -8,11 +8,14 @@ base { archivesName = 'mvt-client' }
 java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
 neoForge {
     version = neo_version
+    // Connector needs unpatched Mojang-mapped classes when launched in development.
+    additionalMinecraftArtifacts.put('vanillaDeobfuscated', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile)
     runs {
         client {
             client()
             gameDirectory = layout.projectDirectory.dir('run/client')
             programArguments.addAll '--username', 'MVT_Dev', '--width', '854', '--height', '480'
+            systemProperty 'connector.clean.path', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile.absolutePath
         }
     }
     mods { mvt_client { sourceSet sourceSets.main } }

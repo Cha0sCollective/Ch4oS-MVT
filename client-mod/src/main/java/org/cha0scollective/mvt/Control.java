@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import net.minecraft.client.Minecraft;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
@@ -32,6 +33,7 @@ import net.minecraft.world.entity.MoverType;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.gametest.GameTestHooks;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -47,8 +49,12 @@ final class Control {
     private static long sequence;
     private static long ticks;
     private static boolean pending;
+    private static boolean configured;
     static void install() {
         if (System.getenv("MVT_CONTROL_DIR") == null) return;
+        // Client-dev also enables GameTests through this vanilla IDE flag. This
+        // opt-in lane uses ordinary gameplay semantics, with GameTests separate.
+        if ("development".equals(System.getenv("MVT_CLIENT_MODE"))) SharedConstants.IS_RUNNING_IN_IDE = false;
         directory = Path.of(System.getenv("MVT_CONTROL_DIR"));
         runId = System.getenv("MVT_RUN_ID");
         if (runId == null || !runId.matches("[a-f0-9]{32}")) throw new IllegalStateException("Invalid MVT run identity");
@@ -58,6 +64,14 @@ final class Control {
         Minecraft mc = Minecraft.getInstance();
         ticks++;
         try {
+            if (!configured) {
+                mc.options.renderDistance().set(2);
+                mc.options.simulationDistance().set(5);
+                mc.options.framerateLimit().set(20);
+                mc.options.enableVsync().set(false);
+                mc.options.pauseOnLostFocus = false;
+                configured = true;
+            }
             if (ticks % 20 == 0) {
                 JsonObject heartbeat = new JsonObject();
                 heartbeat.addProperty("protocol", 1);
@@ -80,18 +94,22 @@ final class Control {
             try {
                 JsonObject args = request.getAsJsonObject("arguments");
                 String operation = request.get("operation").getAsString();
-                if (operation.equals("server_command")) {
+                if (operation.equals("server_command") || operation.equals("save_world")) {
                     var server = mc.getSingleplayerServer();
                     if (server == null) throw new IllegalStateException("Integrated server is unavailable");
-                    String command = args.get("command").getAsString();
+                    boolean save = operation.equals("save_world");
+                    String command = save ? "" : args.get("command").getAsString();
                     server.submit(() -> {
+                        // save-all is registered only on dedicated servers. Use
+                        // that command's own flush API for integrated worlds.
+                        if (save) return server.saveEverything(true, true, true) ? 1 : 0;
                         try { return server.getCommands().getDispatcher().execute(command, server.createCommandSourceStack().withSuppressedOutput()); }
                         catch (Exception commandError) { throw new IllegalStateException("Integrated command failed", commandError); }
                     })
                         .whenComplete((success, error) -> mc.execute(() -> {
                             JsonObject result = new JsonObject();
                             if (error == null) result.addProperty("success", success);
-                            complete(request, result, error == null ? null : "Integrated server command failed");
+                            complete(request, result, error == null ? null : commandFailure(error));
                         }));
                     return;
                 }
@@ -104,6 +122,12 @@ final class Control {
             // Do not continue after protocol corruption, and never print request/launch data.
             mc.stop();
         }
+    }
+
+    private static String commandFailure(Throwable error) {
+        while (error.getCause() != null) error = error.getCause();
+        String detail = error.getClass().getSimpleName()+": "+error.getMessage();
+        return "Integrated server command failed: "+detail.substring(0, Math.min(500, detail.length()));
     }
 
     private static void complete(JsonObject request, JsonObject result, String error) {
@@ -211,6 +235,10 @@ final class Control {
     private static JsonObject snapshot(Minecraft mc, JsonObject args) {
         JsonObject state = new JsonObject();
         state.addProperty("tick", ticks);
+        state.addProperty("gametest_enabled", GameTestHooks.isGametestEnabled());
+        state.addProperty("render_distance", mc.options.renderDistance().get());
+        state.addProperty("simulation_distance", mc.options.simulationDistance().get());
+        state.addProperty("max_fps", mc.options.framerateLimit().get());
         state.addProperty("title_ready", mc.screen instanceof TitleScreen && mc.getOverlay() == null);
         state.addProperty("world_ready", mc.player != null && mc.level != null && mc.getOverlay() == null);
         state.addProperty("screen", mc.screen == null ? "none" : mc.screen.getClass().getSimpleName());

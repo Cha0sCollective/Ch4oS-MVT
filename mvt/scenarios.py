@@ -17,6 +17,8 @@ class Session:
 
     def ready(self):
         def ready(state):
+            if state.get("screen") == "ModMismatchDisconnectedScreen":
+                raise CheckFailed("NeoForge mod-channel negotiation failed; inspect the bounded client log for the rejected channel")
             reason = state.get("disconnect_reason")
             if reason:
                 if re.search(r"(?i)invalid session|verify username|authentication servers|not authenticated", reason):
@@ -36,6 +38,9 @@ class Session:
             if loaded is None:
                 raise CheckFailed("Installed client mod did not load: " + identity)
             candidates = version.removeprefix("jarjar_candidates:").split("|")
+            conversion = getattr(self.client, "expected_normalizations", {}).get(identity)
+            if conversion and state.get("mods", {}).get(conversion["loader"]) and conversion["source_version"] in candidates:
+                candidates.append(conversion["runtime_version"])
             if "unknown" not in candidates and not any("${" in v for v in candidates) and loaded not in candidates:
                 raise CheckFailed("Loaded client mod version differs from installed metadata: " + identity)
         for adapter in self.adapters:
@@ -53,6 +58,12 @@ class Session:
             result = self.control.call("server_command", command=command, timeout=120)
             if result.get("success", 0) <= 0:
                 raise CheckFailed("Integrated-server command/assertion failed: " + command)
+
+    def save(self):
+        if self.server:
+            self.server.save()
+        elif self.control.call("save_world", timeout=120).get("success", 0) <= 0:
+            raise CheckFailed("Integrated server did not confirm the world save/flush")
 
     def setup(self):
         if self.server:
@@ -72,9 +83,16 @@ class Session:
                         raise
                     time.sleep(0.2)
         self.command("fill -3 199 -3 27 199 6 minecraft:stone")
-        self.command(f"gamemode creative {self.uuid}")
+        # UUIDs are entity arguments, not selectors; execute as first so the
+        # game-mode predicate applies to the actual player on either server.
+        creative = f"execute as {self.uuid} if entity @s[gamemode=creative]"
         try:
-            self.command(f"clear {self.uuid}")
+            self.command(creative)
+        except CheckFailed:
+            self.command(f"execute as {self.uuid} run gamemode creative @s")
+            self.command(creative)
+        try:
+            self.command(f"execute as {self.uuid} run clear @s")
         except CheckFailed:
             pass  # Empty inventories also return zero; prove the empty state below.
         self.command(f"execute unless data entity {self.uuid} Inventory[0]")
@@ -90,7 +108,7 @@ class Session:
                 self.command(f"execute if block {position} minecraft:air")
             self.command(f"setblock {x} 200 0 minecraft:chest replace")
             self.command(f"item replace block {x} 200 0 container.0 with {item} 3")
-            self.command(f"give {self.uuid} {block} 1")
+            self.command(f"execute as {self.uuid} run give @s {block} 1")
 
     def interact(self):
         fixtures = [(0, "minecraft:gold_block", "minecraft:diamond")] + [(a.x, a.block, a.item) for a in self.adapters]
