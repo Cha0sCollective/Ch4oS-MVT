@@ -153,3 +153,41 @@ execution, log baselines and release-gate adoption are separate acceptance work.
 Individual schema-2 reports keep `calibration: NOT_PERFORMED`; the separate
 audited certificate establishes `CALIBRATED_DEVELOPMENT` for this exact matrix.
 The existing Packwiz release entry point and original workflow remain unchanged.
+
+## CodeQL review and dispositions
+
+Reviewed on 2026-10-21 for PR #7, at harness commit
+`5d9b71d3c30aeecd5347e0ca6521fe001c6b3360`. Both alerts use
+`py/clear-text-storage-sensitive-data`. The project owner explicitly authorized
+the following individual dispositions; the rule and regression tests remain enabled.
+
+- [Alert #2, exported RCON transcript](https://github.com/Cha0sCollective/Ch4oS-MVT/security/code-scanning/2):
+  **false positive for the reported flow**. CodeQL traces a password deliberately
+  inserted by `test_rcon_trace_redacts_commands_and_replies_without_changing_probe_results`
+  into `Server.rcon`. Before `commands.jsonl` is written, `Runner.redact` replaces
+  the exact per-run RCON password and `sanitize` filters token-shaped values.
+  The regression test confirms that neither the password nor the synthetic token
+  survives in the exported command or response, while assertions receive the
+  original response. CodeQL's reported path continues through these redaction
+  operations. All eight focused development-server tests passed during review.
+- [Alert #1, development server configuration](https://github.com/Cha0sCollective/Ch4oS-MVT/security/code-scanning/1):
+  **accepted development risk**, recorded using GitHub's `won't fix` dismissal
+  reason. `worker/server_launch.py` intentionally writes the RCON password to
+  `server.properties` in the format consumed by the dedicated server. This is
+  real plaintext storage. MVT generates a fresh 192-bit random password per run;
+  it controls only that disposable server and is not a licensed-account password.
+  The development server uses only its per-run internal Docker network, publishes
+  no game or RCON ports, and has no external network attachment. Its installation
+  is temporary, excluded from exported evidence and removed during normal cleanup.
+  The password normally lasts for the test run, not a fixed ten-minute expiry.
+  The file is not explicitly owner-only or memory-backed, trusted Docker/worker
+  operators can access runtime secrets, and forced worker termination can leave
+  temporary state. These limited residual risks are accepted for this isolated
+  development lane.
+
+These dispositions do not approve production or authenticated-client credential
+storage. Revisit the accepted risk if ports or external network access are added,
+passwords are reused, the worker trust boundary changes, or runtime configurations
+are retained or exported. Revisit the log disposition if the redaction path changes
+or its regression fails. Neither disposition changes calibration evidence or
+release-gate approval.
