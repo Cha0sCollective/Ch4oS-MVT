@@ -71,6 +71,17 @@ class DevelopmentServerTests(unittest.TestCase):
         with patch.object(self.server, "docker", side_effect=[json.dumps({self.server.network: {}}), "false"]), self.assertRaises(InfrastructureError):
             self.server.isolate()
 
+    def test_rcon_trace_redacts_commands_and_replies_without_changing_probe_results(self):
+        token = "calibration_redaction_probe"
+        reply = "accessToken="+token+" password="+self.server.password
+        with patch.object(self.server, "docker", return_value=reply):
+            self.assertEqual(self.server.rcon("say "+reply), reply)
+        trace = (self.server.out / "commands.jsonl").read_text()
+        self.assertNotIn(token, trace)
+        self.assertNotIn(self.server.password, trace)
+        self.assertIn("<REDACTED>", trace)
+        self.assertEqual(json.loads(trace)["phase"], self.server.phase)
+
     def test_wrong_loader_or_manifest_cannot_start_a_container(self):
         for item, key, value in ((self.labels, "org.cha0s.mvt.neoforge", "21.1.233"),
                                  (self.manifest, "mode", "production"), (self.manifest, "bootstrap_sha256", "x"*64)):

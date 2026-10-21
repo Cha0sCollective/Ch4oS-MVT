@@ -131,6 +131,15 @@ class Server(Runner):
             raise Unsupported("Development server runtime identity, version or GameTest mode differs from the requested lane")
         self.report.setdefault("development_boots", {})[phase] = {k: value[k] for k in expected}
 
+    def rcon(self, command, timeout=30):
+        answer = self.docker("exec", self.name, "rcon-cli", command, timeout=timeout)
+        # Expanded-suite artifacts apply the same filtering to RCON probes and
+        # replies as client traces/logs. Keep the legacy smoke.py contract intact.
+        with (self.out / "commands.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(sanitize(self.redact(json.dumps({"phase": self.phase, "command": command,
+                                                         "response": answer}))) + "\n")
+        return answer
+
     def capture(self):
         if not self.created_container or not self.phase:
             return

@@ -58,7 +58,8 @@ $clientId = Invoke-Docker -DockerArgs @('image', 'inspect', '--format', '{{.Id}}
 $workerId = Invoke-Docker -DockerArgs @('image', 'inspect', '--format', '{{.Id}}', 'mvt-worker:local')
 $existing = & $docker volume ls --quiet --filter "name=^${WorkerVolume}$"
 if ($existing) {
-    $label = Invoke-Docker -DockerArgs @('volume', 'inspect', '--format', '{{index .Labels "org.cha0s.mvt.worker"}}', $WorkerVolume)
+    $volumeInfo = Invoke-Docker -DockerArgs @('volume', 'inspect', $WorkerVolume) | ConvertFrom-Json
+    $label = $volumeInfo[0].Labels.'org.cha0s.mvt.worker'
     if ($label -ne 'development') { throw 'Existing volume is not owned by the MVT development worker.' }
 } else {
     Invoke-Docker -DockerArgs @('volume', 'create', '--label', 'org.cha0s.mvt.worker=development', $WorkerVolume)
@@ -92,7 +93,8 @@ foreach ($currentSuite in $suites) {
         $code = $LASTEXITCODE
         if ($code -ne 0) { $resultCode = [Math]::Max($resultCode, $code) }
     } finally {
-        $owned = & $docker inspect --format '{{index .Config.Labels "org.cha0s.mvt.worker"}}' $container 2>$null
+        $containerInfo = & $docker inspect $container 2>$null | ConvertFrom-Json
+        $owned = if ($containerInfo) { $containerInfo[0].Config.Labels.'org.cha0s.mvt.worker' } else { $null }
         if ($owned -eq $runId) {
             Invoke-Docker -DockerArgs @('stop', '--time', '300', $container) | Out-Null
             $localResult = Join-Path $outputPath $currentSuite

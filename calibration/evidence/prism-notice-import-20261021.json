@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "classification": "prism_license_notice_rejected",
+  "counted_in_final_matrix": false,
+  "raw_report_path": "auxiliary-final-v2/prism-explicit-server-create/report.json",
+  "raw_report_sha256": "52ad376de9d027c82724b1b3d9dce6a1b80f2d257e73be95b98c091c6cdb025d",
+  "status": "incomplete",
+  "error": "Bundled instance includes unsupported runtime/user data",
+  "failed_step": {
+    "name": "input",
+    "status": "error",
+    "detail": "Bundled instance includes unsupported runtime/user data",
+    "kind": "INFRA_ERROR",
+    "seconds": 1.688
+  },
+  "candidate_notice": "third-party-notices/industrialized-architecture-LICENSE.txt",
+  "remediation": "Import bounded UTF-8 .txt/.md notices, preserve all candidate file hashes, repeat complete matrix against changed MVT source"
+}

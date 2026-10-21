@@ -31,7 +31,9 @@ mode requires a dedicated licensed account and private Prism profile. Neither
 mode performs graphical testing.
 
 A local Docker development worker is available through `worker/local.ps1`,
-including on Windows with Docker Desktop Linux containers. Full calibration is pending.
+including on Windows with Docker Desktop Linux containers. Development calibration
+passed for pinned Ch4oS and a minimal no-Create reference on NeoForge 21.1.248 and
+21.1.233: [results, scope and repeat commands](docs/DEVELOPMENT-CALIBRATION.md).
 Use `-ServerMode development` for a matching NeoForge development server in the
 client-server suite; the default production-server launch remains available.
 See [setup, commands and acceptance checks](docs/HEADLESS-USAGE.md). The existing

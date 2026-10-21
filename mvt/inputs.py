@@ -287,9 +287,19 @@ def prism(archive: Path, work: Path, cache: Cache) -> Pack:
                     continue
                 target = name[len(game_prefix):]
                 first = PurePosixPath(target).parts[0]
-                if first not in ("mods", "config", "defaultconfigs", "kubejs", "scripts", "resourcepacks", "shaderpacks", "options.txt"):
+                notice = first == "third-party-notices"
+                if notice and (PurePosixPath(target).suffix.lower() not in (".txt", ".md") or entry.file_size > 1024*1024):
+                    raise Unsupported("Third-party notices must be bounded plain-text license documents")
+                if not notice and first not in ("mods", "config", "defaultconfigs", "kubejs", "scripts", "resourcepacks", "shaderpacks", "options.txt"):
                     raise Unsupported("Bundled instance includes unsupported runtime/user data")
                 data = z.read(entry)
+                if notice:
+                    try:
+                        data.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise Unsupported("Third-party notices must contain UTF-8 text") from exc
+                    if b"\0" in data:
+                        raise Unsupported("Third-party notices must contain text, not binary data")
                 if target.casefold() in {p.casefold() for p in pack.hashes["client"]}:
                     raise CheckFailed("Duplicate Prism game destination")
                 dest = root / target

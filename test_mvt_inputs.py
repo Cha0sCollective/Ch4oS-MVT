@@ -90,6 +90,19 @@ class InputTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(Unsupported):
                 prism(self.archive(cfg=f"[General]\n{key}=echo unsafe\n"), self.root / "work", self.cache)
 
+    def test_prism_preserves_bounded_license_notices(self):
+        name = "third-party-notices/industrialized-architecture-LICENSE.txt"
+        data = b"Original third-party license\n"
+        pack = prism(self.archive({".minecraft/"+name: data}), self.root / "notices", self.cache)
+        self.assertEqual((pack.roots["client"]/name).read_bytes(), data)
+        self.assertEqual(pack.hashes["client"][name], hashlib.sha256(data).hexdigest())
+        audit(pack.roots["client"], pack.hashes["client"])
+        for i, (name, data) in enumerate((("launch.jar", b"jar"), ("accounts.json", b"{}"),
+                                         ("binary.txt", b"\xff"), ("zero-byte.txt", b"x\0y"),
+                                         ("huge.txt", b"x"*(1024*1024+1)))):
+            with self.subTest(name=name), self.assertRaises(Unsupported):
+                prism(self.archive({".minecraft/third-party-notices/"+name: data}), self.root/f"bad-notice-{i}", self.cache)
+
     def test_prism_traversal_duplicate_and_symlink(self):
         with self.assertRaises(CheckFailed):
             prism(self.archive({"../escape": "bad"}), self.root / "work", self.cache)

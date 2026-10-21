@@ -2,6 +2,10 @@
 
 Date: 2026-10-21. Branch: `codex/headless-client-testing-plan`.
 
+Historical single-run record. The subsequent [development calibration](DEVELOPMENT-CALIBRATION.md)
+completed the repeated reference matrix and deliberate-failure probes. The
+source fingerprints and counts below describe this earlier run.
+
 **The Docker client-server suite passed all 24 report checks.** Matching NeoForge
 development launches resolved the Create Abyss channel mismatch observed in the
 [original development-client/production-server run](LOCAL-WORKER-VALIDATION.md).

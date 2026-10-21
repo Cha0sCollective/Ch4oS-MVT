@@ -1,6 +1,6 @@
 # Extend MVT with headless client testing
 
-Status (2026-10-21): Create Ch4oS passed the single-player suite and all 24 client-server report checks using matching Docker development runtimes. The dedicated development-server mode resolved the earlier Create Abyss channel mismatch. See the [development-server validation](DEVELOPMENT-SERVER-VALIDATION.md), [original worker report](LOCAL-WORKER-VALIDATION.md) and [implemented commands and remaining acceptance](HEADLESS-USAGE.md). Full calibration and licensed authenticated joins remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters.
+Status (2026-10-21): development calibration completed with twelve clean live runs and 37 failure/compatibility probes on pinned Ch4oS and a minimal no-Create reference, using Minecraft 1.21.1 / NeoForge 21.1.248 and 21.1.233. See the [calibration report and certificate](DEVELOPMENT-CALIBRATION.md) and [implemented commands](HEADLESS-USAGE.md). Licensed authenticated production joins, CI execution and log-baseline release gates remain separate acceptance work. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters.
 
 ## Summary
 

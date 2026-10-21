@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "date": "2026-10-21",
+  "classification": "unexpected_early_window_startup_failure",
+  "counted_in_final_matrix": false,
+  "raw_report_path": "faults-final/client-server-smoke-redaction/report.json",
+  "raw_report_sha256": "78829f3d42351621ff4565e34bf97cd244e00228794f63e4f6d5adf9d8ef580e",
+  "actual_exit": 1,
+  "status": "failed",
+  "failed_step": {
+    "name": "start_client",
+    "status": "failed",
+    "detail": "Client exited before completing the requested scenario",
+    "seconds": 6.347
+  },
+  "client_states": [
+    {
+      "Status": "exited",
+      "Running": false,
+      "OOMKilled": false,
+      "ExitCode": 255,
+      "StartedAt": "2026-10-21T20:13:28.922718102Z",
+      "FinishedAt": "2026-10-21T20:13:34.453515986Z"
+    }
+  ],
+  "probe_applied": false,
+  "exception": "java.nio.file.FileSystemNotFoundException in UnionFileSystemProvider while initializing FML early DisplayWindow/SimpleBufferBuilder",
+  "previous_reference_definition_sha256": "2e48595c23e712583a28be11dc5e962703a70d125419e70aa8d0b0578050d7d6",
+  "new_reference_definition_sha256": "eca25a400dd1333eb7e2a40dcad3bd4d1ac610317d3c0c01ae033955347f0d95",
+  "remediation": "Authored minimal reference declares earlyWindowControl=false; rerun every calibration phase, keep actual candidate and MVT assertions unchanged",
+  "configuration_guidance": "https://neoforged.net/meta/displayerrors/"
+}

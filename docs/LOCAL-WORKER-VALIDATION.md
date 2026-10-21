@@ -2,6 +2,10 @@
 
 Date: 2026-10-10. Branch: `codex/headless-client-testing-plan`.
 
+Historical run record. Subsequent [development calibration](DEVELOPMENT-CALIBRATION.md)
+completed repeated client and client-server testing; the observations below
+describe the original development-client/production-server attempt.
+
 Follow-up on 2026-10-21: a matching dedicated development-server mode was added.
 See the [new validation report](DEVELOPMENT-SERVER-VALIDATION.md). The observations
 below describe the original development-client/production-server combination.

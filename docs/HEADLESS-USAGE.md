@@ -5,12 +5,14 @@ local Docker Linux worker and workflows are implemented. The pinned Create Ch4oS
 single-player suite passed gameplay, save/reload persistence and clean shutdown.
 The matching Docker development-server/client pair passed all 24 client-server
 report checks, including interactions, reconnect and restart persistence.
-See the [original live report](LOCAL-WORKER-VALIDATION.md) and
-[development-server validation](DEVELOPMENT-SERVER-VALIDATION.md). The licensed account, CI execution and
-full calibration remain pending. Do not use these suites as a release gate until
-the calibration checklist below passes.
+The [development calibration](DEVELOPMENT-CALIBRATION.md) passed twelve clean live
+runs and 37 failure/compatibility probes for pinned Ch4oS and a minimal no-Create
+reference on NeoForge 21.1.248 and 21.1.233. The licensed account, authenticated
+production lane, CI execution and log-baseline release gate remain pending.
+Historical results are in the [original live report](LOCAL-WORKER-VALIDATION.md)
+and [development-server validation](DEVELOPMENT-SERVER-VALIDATION.md).
 
-Local validation: 60 Python tests passed on Windows and Linux (including all 15
+Local validation: 69 Python tests passed on Windows and Linux (including all 15
 original harness tests), and Java 21 builds plus prepared launch export succeeded
 against NeoForge 21.1.233 and 21.1.248. Orchestration unit tests use explicit
 simulated clients/servers; live game results are reported separately.
@@ -25,8 +27,8 @@ do not approve a release or change a Packwiz source.
 Require Python 3.11+, Docker Linux containers and **Minecraft 1.21.1 / an exact
 NeoForge 21.1.x version**. Client suites require Linux. Other loaders and Minecraft
 versions return an explicit incomplete result. The bridge's two tested build
-versions establish compilation compatibility, not runtime calibration for every
-21.1.x version.
+versions and reference packs establish the scope in the calibration report;
+they do not establish runtime calibration for every 21.1.x version or modpack.
 
 Supported sources:
 
@@ -39,6 +41,8 @@ Supported sources:
 - `--prism-zip instance.zip`: a self-contained Prism export with bundled game
   files, Minecraft and NeoForge components, and no executable hooks. Import
   mods/config/defaultconfigs/kubejs/scripts/resourcepacks/shaderpacks/options.
+  UTF-8 `.txt`/`.md` license documents under `third-party-notices/` are retained
+  byte-for-byte and hashed (maximum 1 MiB each); binaries there are rejected.
   Reject traversal, duplicate destinations, links, private runtime/user files,
   custom runtime patches, unsupported hooks and oversized archives. Saved worlds
   are excluded; each run creates its own world. Standard LWJGL 3.3.3 is supported.
@@ -339,7 +343,15 @@ Cleanup failures make a passing suite incomplete. A forced process/worker kill
 cannot guarantee cleanup; inspect objects labelled `ch4os.mvt=disposable` before
 removing only abandoned MVT resources.
 
-Before adopting the new suites:
+Repeat the following when expanding the tested development scope. Items 1–4
+have completed for the [recorded matrix](DEVELOPMENT-CALIBRATION.md); the licensed
+authenticated lane and release-gate acceptance remain separate work:
+
+The repeatable development calibration matrix and its evidence auditor are in
+[`calibration/`](../calibration/README.md). It separates expected-failure probes
+from raw suite results and requires all clean repetitions and planned probes
+before issuing an aggregate development certificate. Authenticated acceptance
+and log review remain separate requirements.
 
 1. Provision the Linux worker; build the exact NeoForge image and prove headless
    startup for Ch4oS and a NeoForge 1.21.1 pack without Create.
