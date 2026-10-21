@@ -2,6 +2,10 @@
 
 Date: 2026-10-10. Branch: `codex/headless-client-testing-plan`.
 
+Follow-up on 2026-10-21: a matching dedicated development-server mode was added.
+See the [new validation report](DEVELOPMENT-SERVER-VALIDATION.md). The observations
+below describe the original development-client/production-server combination.
+
 The live single-player suite passed. The client-server suite failed at channel
 negotiation because this pack enables Create Abyss only in development, while
 the dedicated server uses production mode. This is development-mode evidence;

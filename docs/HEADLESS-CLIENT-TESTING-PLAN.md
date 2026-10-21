@@ -1,6 +1,6 @@
 # Extend MVT with headless client testing
 
-Status: Implementation and a local Docker Linux development worker added on 2026-10-10. Create Ch4oS passed the single-player suite; its client-server join was blocked by Create Abyss's development-only networking on the client versus the production server. See the [live validation report](LOCAL-WORKER-VALIDATION.md) and [implemented commands, worker setup and remaining acceptance](HEADLESS-USAGE.md). Full calibration and licensed authenticated joins remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters.
+Status (2026-10-21): Create Ch4oS passed the single-player suite and all 24 client-server report checks using matching Docker development runtimes. The dedicated development-server mode resolved the earlier Create Abyss channel mismatch. See the [development-server validation](DEVELOPMENT-SERVER-VALIDATION.md), [original worker report](LOCAL-WORKER-VALIDATION.md) and [implemented commands and remaining acceptance](HEADLESS-USAGE.md). Full calibration and licensed authenticated joins remain pending. Saved for review on 2026-09-22 and revised on 2026-10-09 for pack-independent inputs and runtime-selected adapters.
 
 ## Summary
 
@@ -18,6 +18,13 @@ separate. This enables worker-based client/gameplay checks without setting up a
 test account and does not assert a license exemption. Implementation/build work
 now includes a local Docker Linux worker; the original feasibility and calibration
 requirements below still apply before adopting a release gate.
+
+Approved addition (2026-10-21): an explicit dedicated development-server mode
+matches the development client when mods enable development-only content. Its
+server bootstrap is a recorded source overlay for GameTest runtime settings and
+identity only; gameplay actions and independent RCON assertions are unchanged.
+Production servers remain free of MVT mod overlays. Authentication is untested
+in the development pair, which does not replace production compatibility checks.
 
 Keep the core lifecycle and interaction tests independent of individual mods. Select additional mod-specific test adapters at runtime from the installed mod inventory, starting with Create. Support the exact NeoForge version declared by each pack when it is compatible with Minecraft 1.21.1 and MVT's test components; do not substitute a newer loader automatically. Forge, Fabric, other loaders, and other Minecraft versions are outside scope.
 

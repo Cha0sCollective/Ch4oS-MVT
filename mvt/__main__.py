@@ -67,6 +67,8 @@ def parser():
             p.add_argument("--client-memory", type=memory, default="8G")
             p.add_argument("--boot-timeout", type=int, default=900)
             p.add_argument("--client-mode", choices=("development", "authenticated"), default="development")
+            p.add_argument("--server-mode", choices=("production", "development"), default="production")
+            p.add_argument("--development-server-image", help="Prepared local NeoForge development-server image for the exact candidate loader")
             p.add_argument("--client-image", help="Prepared Linux image; use a reviewed immutable digest")
             p.add_argument("--launcher-dir", type=Path, help="Dedicated private Prism root (authenticated mode)")
             p.add_argument("--account-profile", help="Dedicated Prism profile name; never a password/token")
@@ -184,6 +186,10 @@ def main(argv=None):
             def get_input():
                 if options.command == "run" and not options.accept_eula:
                     raise Unsupported("Explicit --accept-eula is required before game execution")
+                if options.command == "run" and options.server_mode == "development" and (
+                    options.suite != "client-server-smoke" or options.client_mode != "development"
+                ):
+                    raise Unsupported("Development server mode requires the development client-server suite")
                 return resolve(options, work)
             pack, sides = report.step("input", get_input)
             report.data["pack"] = pack.evidence()
@@ -233,7 +239,7 @@ def main(argv=None):
                 except Exception as exc:
                     cleanup.append(server.redact(str(exc)))
                 report.data["server_runtime"] = {k: server.report[k] for k in
-                    ("image_id", "image_digests", "java_runtime", "versions") if k in server.report}
+                    ("image_id", "image_digests", "java_runtime", "versions", "mode", "bootstrap_sha256", "development_boots") if k in server.report}
                 report.data["server_online_mode"] = not server.development
             code = report.finish(cleanup)
             if options.command == "inspect" and code == 0:

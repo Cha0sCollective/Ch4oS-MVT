@@ -1,14 +1,16 @@
 # Expanded headless suites
 
-Implementation status (2026-10-10): the runner, verified installer, control mod,
+Implementation status (2026-10-21): the runner, verified installer, control mod,
 local Docker Linux worker and workflows are implemented. The pinned Create Ch4oS
 single-player suite passed gameplay, save/reload persistence and clean shutdown.
-The client-server join was rejected by Create Abyss's development-only channel;
-see the [live validation report](LOCAL-WORKER-VALIDATION.md). The licensed account, CI execution and
+The matching Docker development-server/client pair passed all 24 client-server
+report checks, including interactions, reconnect and restart persistence.
+See the [original live report](LOCAL-WORKER-VALIDATION.md) and
+[development-server validation](DEVELOPMENT-SERVER-VALIDATION.md). The licensed account, CI execution and
 full calibration remain pending. Do not use these suites as a release gate until
 the calibration checklist below passes.
 
-Local validation: 53 Python tests passed on Windows and Linux (including all 15
+Local validation: 60 Python tests passed on Windows and Linux (including all 15
 original harness tests), and Java 21 builds plus prepared launch export succeeded
 against NeoForge 21.1.233 and 21.1.248. Orchestration unit tests use explicit
 simulated clients/servers; live game results are reported separately.
@@ -78,7 +80,8 @@ and reopens the same world before verifying the nonce, block and player inventor
 `--suite client-server-smoke` joins a disposable dedicated server, exercises the
 same actions through normal client networking, cross-checks client state against
 RCON, reconnects, then restarts both processes and verifies persistence without
-recreating fixtures. The server receives no test mod. No game/RCON ports are
+recreating fixtures. The production server receives no test mod; the development
+server includes a recorded runtime bootstrap, described below. No game/RCON ports are
 published; the client can address only the per-run server on its private network.
 
 `--adapters auto` selects compatible known adapters from the required sides'
@@ -108,8 +111,10 @@ different Minecraft loader.
 
 `--client-mode development` is the default for the new client commands. It uses
 NeoForge's prepared development run with the fixed `MVT_Dev` identity, no Prism
-account, and an offline-mode disposable server. After server installation/boot,
-its public Docker bridge is disconnected; scenario traffic uses an internal
+account, and an offline-mode disposable server. A production server needs download
+access during installation, then its public Docker bridge is disconnected.
+A prepared development server uses only an internal network from creation;
+scenario traffic uses an internal
 per-run network. It reports **`authentication: NOT_TESTED`** even after a passing
 interaction suite. It tests real client initialization and gameplay protocols;
 it does not test Microsoft sign-in, entitlement, Mojang session authentication or
@@ -121,8 +126,25 @@ Mods can gate content and networking on `FMLEnvironment.production`. A developme
 client can therefore expose experimental registries/channels absent from a
 production dedicated server, even with identical JARs and loader versions. Report
 that compatibility blocker without treating it as a confirmed production pack
-regression. The current Ch4oS candidate has this limitation through Create Abyss
-bundled in Create Submarine; a matching development-server lane is future work.
+regression. The original Ch4oS run encountered this through Create Abyss bundled
+in Create Submarine. Select a matching development server with
+`--server-mode development --development-server-image <prepared-image>` to test
+the pair in the same development environment.
+
+`--server-mode production` remains the default. Offline authentication settings
+do not change FML's production identity. Development server mode is allowed only
+for `client-server-smoke` with `--client-mode development`; it cannot silently
+replace an authenticated server or the production lifecycle suite.
+
+The dedicated development image uses ModDevGradle's `server()` run, the candidate's
+exact NeoForge version and Java 21. It is not a GameTest server and starts without
+a GUI or virtual display. Its `mvt_server_bootstrap` source overlay disables the
+automatic GameTest IDE trigger and publishes a bounded runtime identity; it does
+not register gameplay commands, fixtures or packet handlers. Its build hash is
+recorded separately from the candidate's mod hashes. MVT requires a fresh marker
+on each boot with the matching run/version, `fml_production: false` and
+`gametest_enabled: false`. Candidate JARs remain intact. Normal client networking
+and independent RCON assertions still test every interaction and persisted state.
 
 `--client-mode authenticated` requires an existing dedicated licensed Java account,
 interactive sign-in to a dedicated Prism root, its account profile name and the
@@ -163,7 +185,20 @@ manifest, builds the client image if missing, builds the trusted supervisor,
 and runs `client-smoke` followed by `client-server-smoke`. Use `-Suite` to select
 one, `-BuildClient` after changing the automation mod or client Dockerfile, and
 `-Output` for a new evidence directory. `-PackRepo` and `-PackPath` select other
-supported Packwiz sources. This helper runs development mode only.
+supported Packwiz sources. This helper always uses the development client mode.
+
+For matching development runtimes on both sides:
+
+```powershell
+./worker/local.ps1 -PackSha FULL_COMMIT_SHA -AcceptEula `
+  -Suite client-server-smoke -ServerMode development
+```
+
+This builds the exact-version private server image if missing. Use `-BuildServer`
+after changing `server-mod`, `worker/Dockerfile.server` or `worker/server_launch.py`.
+`-BuildClient` rebuilds the development server too when that mode is selected.
+Without `-ServerMode development`, the helper retains its production-server
+launch with offline authentication for the development client.
 
 The supervisor uses Docker's socket to create sibling game containers; only
 trusted MVT code runs in it. Candidate game containers receive no Docker socket,
@@ -225,6 +260,25 @@ python3 -B -m mvt run --pack-sha FULL_COMMIT_SHA \
   --output mvt-results-development
 ```
 
+To prepare and select a dedicated development server on a native Linux worker:
+
+```sh
+docker build -f worker/Dockerfile.server \
+  --build-arg CLIENT_RUNTIME_IMAGE=mvt-client:21.1.248 \
+  --build-arg NEOFORGE_VERSION=21.1.248 -t mvt-server-dev:21.1.248 .
+python3 -B -m mvt run --pack-sha FULL_COMMIT_SHA \
+  --suite client-server-smoke --client-mode development \
+  --client-image mvt-client:21.1.248 --server-mode development \
+  --development-server-image mvt-server-dev:21.1.248 \
+  --accept-eula --output mvt-results-development-pair
+```
+
+`CLIENT_RUNTIME_IMAGE` is a prepared local client image from the preceding build,
+used to reuse private Minecraft/Gradle dependencies. Only the dedicated server
+launch is executed. The image also contains the RCON utility copied from a pinned
+server image; it does not launch that image's production installer. Keep both
+images private. Development-mode results do not establish production compatibility.
+
 For authenticated runs, also install a pinned Prism Launcher and Xvfb on the host.
 Create a private, signed-in launcher root, set its library/assets locations inside
 that root, complete Java/runtime downloads through Prism and disable any global
@@ -256,6 +310,10 @@ run on hosted runners without account access. Do not attach this dedicated worke
 to unrelated untrusted repository workflows. Provisioning the environment and
 worker is an operator task; the workflow file alone does not enforce those
 repository settings.
+
+For the manual workflow's development-server selection, also provision
+`MVT_DEVELOPMENT_SERVER_IMAGE`. The workflow and CLI reject combining that server
+mode with an authenticated client; hosted PR checks never receive an account.
 
 ## Evidence and remaining acceptance
 

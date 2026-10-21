@@ -1,7 +1,7 @@
 name: Expanded MVT checks
 on:
   pull_request:
-    paths: ['mvt/**', 'client-mod/**', 'worker/**', 'test_mvt*.py', '.github/workflows/expanded-tests.yml']
+    paths: ['mvt/**', 'client-mod/**', 'server-mod/**', 'worker/**', 'test_mvt*.py', '.github/workflows/expanded-tests.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,3 +39,8 @@ jobs:
         env:
           NEOFORGE: ${{ matrix.neoforge }}
         run: gradle --no-daemon -Pneo_version="$NEOFORGE" build exportMvtLaunch
+      - name: Compile the dedicated development-server bootstrap
+        working-directory: server-mod
+        env:
+          NEOFORGE: ${{ matrix.neoforge }}
+        run: gradle --no-daemon -Pneo_version="$NEOFORGE" build exportMvtServerLaunch

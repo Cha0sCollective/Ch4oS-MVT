@@ -1,0 +1,38 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.89'
+}
+group = 'org.cha0scollective.mvt'
+version = '0.2.0'
+base { archivesName = 'mvt-server-bootstrap' }
+java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
+neoForge {
+    version = neo_version
+    additionalMinecraftArtifacts.put('vanillaDeobfuscated', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile)
+    runs {
+        server {
+            server()
+            gameDirectory = layout.projectDirectory.dir('run/server')
+            programArguments.add '--nogui'
+            systemProperty 'connector.clean.path', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile.absolutePath
+            systemProperty 'neoforge.enableGameTest', 'false'
+        }
+    }
+    mods { mvt_server_bootstrap { sourceSet sourceSets.main } }
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.withType(Jar).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
+tasks.register('exportMvtServerLaunch') {
+    dependsOn 'jar', 'prepareServerRun'
+    doLast {
+        def run = tasks.named('runServer').get()
+        def vmFile = layout.buildDirectory.file('moddev/serverRunVmArgs.txt').get().asFile.absolutePath
+        def args = run.args + run.argumentProviders.collectMany { it.asArguments().toList() }
+        def command = ['java', '@'+vmFile] + run.allJvmArgs + ['-cp', run.classpathProvider.asPath, run.mainClass.get()] + args
+        def jarBytes = tasks.named('jar').get().archiveFile.get().asFile.bytes
+        def hash = java.security.MessageDigest.getInstance('SHA-256').digest(jarBytes).encodeHex().toString()
+        def data = [protocol: 1, mode: 'development', minecraft: '1.21.1', neoforge: neo_version,
+                    command: command, environment: run.environmentProperty.get(), bootstrap_sha256: hash]
+        layout.buildDirectory.file('mvt-server-launch.json').get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(data))
+    }
+}

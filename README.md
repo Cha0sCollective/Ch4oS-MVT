@@ -32,6 +32,8 @@ mode performs graphical testing.
 
 A local Docker development worker is available through `worker/local.ps1`,
 including on Windows with Docker Desktop Linux containers. Full calibration is pending.
+Use `-ServerMode development` for a matching NeoForge development server in the
+client-server suite; the default production-server launch remains available.
 See [setup, commands and acceptance checks](docs/HEADLESS-USAGE.md). The existing
 `smoke.py` CLI, report contract and Ch4oS Packwiz release workflow remain unchanged.
 

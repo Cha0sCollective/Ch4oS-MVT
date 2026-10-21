@@ -14,6 +14,11 @@ on:
         type: choice
         options: [development, authenticated]
         default: development
+      server_mode:
+        description: Development server requires the development client-server suite
+        type: choice
+        options: [production, development]
+        default: production
       accept_eula:
         description: I accept the Minecraft EULA for this test run
         type: boolean
@@ -39,17 +44,26 @@ jobs:
           PACK_SHA: ${{ inputs.pack_sha }}
           SUITE: ${{ inputs.suite }}
           MODE: ${{ inputs.client_mode }}
+          SERVER_MODE: ${{ inputs.server_mode }}
           ACCEPT_EULA: ${{ inputs.accept_eula }}
           CLIENT_IMAGE: ${{ vars.MVT_CLIENT_IMAGE }}
           SERVER_IMAGE: ${{ vars.MVT_SERVER_IMAGE }}
+          DEVELOPMENT_SERVER_IMAGE: ${{ vars.MVT_DEVELOPMENT_SERVER_IMAGE }}
           LAUNCHER_DIR: ${{ vars.MVT_PRISM_ROOT }}
           ACCOUNT_PROFILE: ${{ vars.MVT_PRISM_PROFILE }}
           AUTOMATION_JAR: ${{ vars.MVT_AUTOMATION_JAR }}
         run: |
           test "$ACCEPT_EULA" = true || { echo 'EULA acceptance required'; exit 2; }
-          test -n "$CLIENT_IMAGE" && test -n "$SERVER_IMAGE" || { echo 'Worker image provisioning required'; exit 2; }
+          test -n "$CLIENT_IMAGE" || { echo 'Client image provisioning required'; exit 2; }
           args=(--pack-sha "$PACK_SHA" --suite "$SUITE" --client-mode "$MODE"
-                --client-image "$CLIENT_IMAGE" --image "$SERVER_IMAGE" --accept-eula --output mvt-results)
+                --client-image "$CLIENT_IMAGE" --accept-eula --output mvt-results)
+          if test "$SERVER_MODE" = development; then
+            test -n "$DEVELOPMENT_SERVER_IMAGE" || { echo 'Development server image provisioning required'; exit 2; }
+            args+=(--server-mode development --development-server-image "$DEVELOPMENT_SERVER_IMAGE")
+          else
+            test -n "$SERVER_IMAGE" || { echo 'Server image provisioning required'; exit 2; }
+            args+=(--image "$SERVER_IMAGE")
+          fi
           if test "$MODE" = authenticated; then
             args+=(--launcher-dir "$LAUNCHER_DIR" --account-profile "$ACCOUNT_PROFILE" --automation-jar "$AUTOMATION_JAR")
           fi

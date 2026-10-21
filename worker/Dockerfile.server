@@ -1,0 +1,17 @@
+ARG CLIENT_RUNTIME_IMAGE=mvt-client-dev:21.1.248
+FROM itzg/minecraft-server@sha256:aae986843ab9b00effb816c6404d28519671bcaa49bf234589d4a0e74c56ccb5 AS rcon
+FROM ${CLIENT_RUNTIME_IMAGE}
+USER root
+ARG NEOFORGE_VERSION=21.1.248
+COPY --from=rcon /usr/local/bin/rcon-cli /usr/local/bin/rcon-cli
+COPY server-mod/build.gradle server-mod/gradle.properties server-mod/settings.gradle /opt/mvt/server-mod/
+WORKDIR /opt/mvt/server-mod
+RUN gradle -g /opt/mvt/gradle-cache --no-daemon -Pneo_version=$NEOFORGE_VERSION createMinecraftArtifacts
+COPY server-mod/src /opt/mvt/server-mod/src
+COPY worker/server_launch.py /opt/mvt/server_launch.py
+RUN gradle -g /opt/mvt/gradle-cache --no-daemon -Pneo_version=$NEOFORGE_VERSION build exportMvtServerLaunch \
+    && chmod -R a+rX /opt/mvt && mkdir -p /data /control
+LABEL org.cha0s.mvt.protocol="0" org.cha0s.mvt.server-protocol="1" org.cha0s.mvt.runtime="development" \
+      org.cha0s.mvt.minecraft="1.21.1" org.cha0s.mvt.neoforge=$NEOFORGE_VERSION
+WORKDIR /data
+ENTRYPOINT ["python3", "/opt/mvt/server_launch.py"]

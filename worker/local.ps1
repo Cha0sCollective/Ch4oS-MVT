@@ -7,9 +7,11 @@ param(
     [string]$PackPath = 'pack',
     [switch]$AcceptEula,
     [switch]$BuildClient,
+    [switch]$BuildServer,
     [string]$Output,
     [string]$WorkerVolume = 'mvt-worker-data',
     [string]$ServerImage = 'itzg/minecraft-server:java21',
+    [ValidateSet('production', 'development')][string]$ServerMode = 'production',
     [string]$ServerHeap = '4G',
     [string]$ServerMemory = '6G',
     [string]$ClientMemory = '8G'
@@ -42,6 +44,15 @@ $clientTag = "mvt-client-dev:$neo"
 if ($BuildClient -or -not (& $docker image ls --quiet $clientTag)) {
     Invoke-Docker -DockerArgs @('build', '-f', (Join-Path $PSScriptRoot 'Dockerfile'), '--build-arg', "NEOFORGE_VERSION=$neo", '-t', $clientTag, $repoRoot)
 }
+$developmentServerId = $null
+if ($ServerMode -eq 'development') {
+    $serverTag = "mvt-server-dev:$neo"
+    if ($BuildServer -or $BuildClient -or -not (& $docker image ls --quiet $serverTag)) {
+        Invoke-Docker -DockerArgs @('build', '-f', (Join-Path $PSScriptRoot 'Dockerfile.server'),
+            '--build-arg', "CLIENT_RUNTIME_IMAGE=$clientTag", '--build-arg', "NEOFORGE_VERSION=$neo", '-t', $serverTag, $repoRoot)
+    }
+    $developmentServerId = Invoke-Docker -DockerArgs @('image', 'inspect', '--format', '{{.Id}}', $serverTag)
+}
 Invoke-Docker -DockerArgs @('build', '-f', (Join-Path $PSScriptRoot 'Dockerfile.runner'), '-t', 'mvt-worker:local', $repoRoot)
 $clientId = Invoke-Docker -DockerArgs @('image', 'inspect', '--format', '{{.Id}}', $clientTag)
 $workerId = Invoke-Docker -DockerArgs @('image', 'inspect', '--format', '{{.Id}}', 'mvt-worker:local')
@@ -56,6 +67,7 @@ New-Item -ItemType Directory -Path $outputPath | Out-Null
 $metadata = [ordered]@{ run_id = $runId; pack_repository = $PackRepo; pack_path = $PackPath; pack_sha = $PackSha;
     minecraft = '1.21.1'; neoforge = $neo; client_mode = 'development'; suite = $Suite;
     worker_image_id = $workerId; client_image_id = $clientId; server_image_requested = $ServerImage;
+    server_mode = $ServerMode; development_server_image_id = $developmentServerId;
     worker_volume = $WorkerVolume; client_memory = $ClientMemory; server_memory = $ServerMemory; server_heap = $ServerHeap }
 [IO.File]::WriteAllText((Join-Path $outputPath 'worker-run.json'), ($metadata | ConvertTo-Json))
 $suites = if ($Suite -eq 'both') { @('client-smoke', 'client-server-smoke') } else { @($Suite) }
@@ -70,6 +82,10 @@ foreach ($currentSuite in $suites) {
         '--suite', $currentSuite, '--client-mode', 'development', '--client-image', $clientId, '--image', $ServerImage,
         '--heap', $ServerHeap, '--container-memory', $ServerMemory, '--client-memory', $ClientMemory,
         '--cache', '/mvt-worker/cache', '--output', $remoteResult)
+    # A client-only suite has no server and must not request a server runtime.
+    if ($currentSuite -eq 'client-server-smoke' -and $ServerMode -eq 'development') {
+        $runArgs += @('--server-mode', 'development', '--development-server-image', $developmentServerId)
+    }
     try {
         Write-Host "Running $currentSuite for $PackSha / NeoForge $neo"
         & $docker @runArgs
