@@ -1,0 +1,83 @@
+name: Manual headless MVT
+on:
+  workflow_dispatch:
+    inputs:
+      pack_sha:
+        description: Reviewed full commit SHA in the Ch4oS Packwiz repository
+        type: string
+        required: true
+      suite:
+        type: choice
+        options: [client-smoke, client-server-smoke]
+        default: client-server-smoke
+      client_mode:
+        type: choice
+        options: [development, authenticated]
+        default: development
+      server_mode:
+        description: Development server requires the development client-server suite
+        type: choice
+        options: [production, development]
+        default: production
+      accept_eula:
+        description: I accept the Minecraft EULA for this test run
+        type: boolean
+        default: false
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: mvt-dedicated-client-account
+  cancel-in-progress: false
+jobs:
+  headless:
+    # No PR event has access to this worker. The environment restricts dispatch refs.
+    environment: mvt-headless
+    runs-on: [self-hosted, linux, mvt-client]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Run selected suite with private worker provisioning
+        env:
+          PACK_SHA: ${{ inputs.pack_sha }}
+          SUITE: ${{ inputs.suite }}
+          MODE: ${{ inputs.client_mode }}
+          SERVER_MODE: ${{ inputs.server_mode }}
+          ACCEPT_EULA: ${{ inputs.accept_eula }}
+          CLIENT_IMAGE: ${{ vars.MVT_CLIENT_IMAGE }}
+          SERVER_IMAGE: ${{ vars.MVT_SERVER_IMAGE }}
+          DEVELOPMENT_SERVER_IMAGE: ${{ vars.MVT_DEVELOPMENT_SERVER_IMAGE }}
+          LAUNCHER_DIR: ${{ vars.MVT_PRISM_ROOT }}
+          ACCOUNT_PROFILE: ${{ vars.MVT_PRISM_PROFILE }}
+          AUTOMATION_JAR: ${{ vars.MVT_AUTOMATION_JAR }}
+        run: |
+          test "$ACCEPT_EULA" = true || { echo 'EULA acceptance required'; exit 2; }
+          test -n "$CLIENT_IMAGE" || { echo 'Client image provisioning required'; exit 2; }
+          args=(--pack-sha "$PACK_SHA" --suite "$SUITE" --client-mode "$MODE"
+                --client-image "$CLIENT_IMAGE" --accept-eula --output mvt-results)
+          if test "$SERVER_MODE" = development; then
+            test -n "$DEVELOPMENT_SERVER_IMAGE" || { echo 'Development server image provisioning required'; exit 2; }
+            args+=(--server-mode development --development-server-image "$DEVELOPMENT_SERVER_IMAGE")
+          else
+            test -n "$SERVER_IMAGE" || { echo 'Server image provisioning required'; exit 2; }
+            args+=(--image "$SERVER_IMAGE")
+          fi
+          if test "$MODE" = authenticated; then
+            args+=(--launcher-dir "$LAUNCHER_DIR" --account-profile "$ACCOUNT_PROFILE" --automation-jar "$AUTOMATION_JAR")
+          fi
+          python3 -B -m mvt run "${args[@]}"
+      - name: Record the workflow revision
+        if: always()
+        run: |
+          mkdir -p mvt-results
+          printf '%s\n' "$GITHUB_SHA" > mvt-results/workflow-commit.txt
+      - name: Upload bounded harness evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: mvt-headless-${{ github.run_id }}-${{ github.run_attempt }}
+          path: mvt-results/
+          if-no-files-found: warn
+          retention-days: 14

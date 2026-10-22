@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "MVT NeoForge-only reference",
+  "minecraft": "1.21.1",
+  "neoforge": "21.1.233",
+  "third_party_mods": [],
+  "client_options": {"onboardAccessibility": false, "skipMultiplayerWarning": true},
+  "client_loader_config": {"earlyWindowControl": false},
+  "server_files": {},
+  "server_counterpart": "Explicit empty dedicated-server pack declared by this fixture; never inferred from a user archive",
+  "purpose": "Independent vanilla core lifecycle and networking reference without Create; not a representative third-party modpack"
+}

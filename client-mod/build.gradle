@@ -1,0 +1,40 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.89'
+}
+group = 'org.cha0scollective.mvt'
+version = '0.2.0'
+base { archivesName = 'mvt-client' }
+java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
+neoForge {
+    version = neo_version
+    // Connector needs unpatched Mojang-mapped classes when launched in development.
+    additionalMinecraftArtifacts.put('vanillaDeobfuscated', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile)
+    runs {
+        client {
+            client()
+            gameDirectory = layout.projectDirectory.dir('run/client')
+            programArguments.addAll '--username', 'MVT_Dev', '--width', '854', '--height', '480'
+            systemProperty 'connector.clean.path', layout.buildDirectory.file('moddev/vanilla-clean.jar').get().asFile.absolutePath
+        }
+    }
+    mods { mvt_client { sourceSet sourceSets.main } }
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.withType(Jar).configureEach { preserveFileTimestamps = false; reproducibleFileOrder = true }
+
+// Export the plugin's prepared Java command without launching a game during image build.
+tasks.register('exportMvtLaunch') {
+    dependsOn 'jar', 'prepareClientRun'
+    doLast {
+        def run = tasks.named('runClient').get()
+        def jvm = run.allJvmArgs
+        def args = run.args + run.argumentProviders.collectMany { it.asArguments().toList() }
+        def vmFile = layout.buildDirectory.file('moddev/clientRunVmArgs.txt').get().asFile.absolutePath
+        def command = ['java', '@'+vmFile, '-XX:MaxRAMPercentage=70.0'] + jvm + ['-cp', run.classpathProvider.asPath, run.mainClass.get()] + args
+        def jarBytes = tasks.named('jar').get().archiveFile.get().asFile.bytes
+        def hash = java.security.MessageDigest.getInstance('SHA-256').digest(jarBytes).encodeHex().toString()
+        def data = [command: command, environment: run.environmentProperty.get(), neoforge: neo_version, automation_sha256: hash]
+        layout.buildDirectory.file('mvt-launch.json').get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(data))
+    }
+}

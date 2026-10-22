@@ -1,0 +1,11 @@
+.git
+.mvt-cache
+__pycache__
+**/__pycache__
+client-mod/.gradle
+client-mod/build
+client-mod/run
+server-mod/.gradle
+server-mod/build
+server-mod/run
+mvt-results*

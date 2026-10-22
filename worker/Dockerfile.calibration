@@ -1,0 +1,4 @@
+ARG WORKER_IMAGE=mvt-worker:local
+FROM ${WORKER_IMAGE}
+COPY calibration /opt/mvt/calibration
+ENTRYPOINT ["python3", "-m", "calibration.run"]

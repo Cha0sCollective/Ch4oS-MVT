@@ -1,0 +1,5 @@
+worker/*.sh text eol=lf
+worker/Dockerfile text eol=lf
+worker/Dockerfile.runner text eol=lf
+worker/Dockerfile.server text eol=lf
+worker/Dockerfile.calibration text eol=lf
